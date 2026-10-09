@@ -1,0 +1,12 @@
+{
+  "name": "claude-mods",
+  "description": "Mods for Claude Code: live panes, bands and hooks that change how a session looks and behaves",
+  "owner": { "name": "Broo37" },
+  "plugins": [
+    {
+      "name": "clean-view",
+      "source": "./clean-view",
+      "description": "Hides tool calls, diffs and command output while Claude works, and shows the plan as a checklist above the prompt"
+    }
+  ]
+}

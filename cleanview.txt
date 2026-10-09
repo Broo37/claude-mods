@@ -1,0 +1,98 @@
+Before you start: read this entire prompt yourself and make sure you understand it. Then, before you do anything else, tell me in plain language what this prompt is going to do, every file you will create, overwrite or delete, every script you will run on my machine, and anything that costs money or is hard to undo. Ask me to confirm I have read and understood it, and wait for my yes before you begin.
+
+Build me a Claude Code mod called **Clean View**. It makes Claude Code feel calm and friendly for people who aren't technical. While Claude works, the tool calls, file diffs and command output are hidden, and one simple checklist sits above the prompt so I can always see the plan, what's happening now and how far along it is.
+
+Before you write any code, load the `plugin-authoring` skill and follow it. Build this as a function-hook plugin that hot-reloads in this session. Don't use a shell-script hook or an MCP server.
+
+## What I should see
+
+While Claude works, this sits just above the prompt:
+
+```
+Build my landing page · 1m 12s                     [ ● Clean View: ON ]
+✓ Read your brand notes            ██████████  Done
+▶ Build the pricing section        ██████░░░░  60%
+○ Add the contact form             ░░░░░░░░░░  Next
+○ Polish the footer                ░░░░░░░░░░  Up next
+```
+
+- **Header:** the job's name in 2 to 6 plain words, then how long it has been running.
+- **Done steps:** a green check, a dimmed name, a full meter and "Done".
+- **Current step:** a ▶, the name in bold and a meter that fills to the reported percent. If there's no percent yet, the meter shows a moving sweep and the label says "Working".
+- **Upcoming steps:** dimmed. The first one says "Next" and the rest say "Up next".
+- **The button** sits at the right of the header row on every screen, even when nothing is running. One click turns Clean View on or off and shows a short toast.
+
+The header changes with the state of the job:
+
+| State | Header shows |
+|---|---|
+| Working | Job name · time running |
+| Needs you | Highlighted **Needs you** badge and the reason, e.g. "Claude needs your OK to continue". The current step's ▶ becomes ‖ |
+| Stuck | ⚠ Stuck: the reason, in one plain sentence |
+| Stopped | ■ Stopped · job name · you pressed Esc |
+| Done | ✓ All done · job name · took 2m 14s. After 5 seconds it shrinks to one line |
+
+## How it works
+
+**1. Two tools Claude calls (register them with `$.tool.register` at session start)**
+- `plan_steps({ steps: string[] })`: Claude lays out every step of the job up front, 2 to 8 short names in order. The first step starts right away. Return "Planned N steps. The first one has started."
+- `report_progress({ task: string, percent: number })`: Claude reports progress on the current step. Clamp the percent to 0 to 100. When a planned step is reported, every step before it is checked off. When a step reaches 100, it's checked off and the next one starts automatically. A name that isn't in the plan becomes a new step. Return "Progress noted: N%."
+
+**2. Make Claude use them (`prompt.compose`)**
+While Clean View is on, add a system-prompt section that says:
+- Write every step name in plain English a non-technical person understands. Keep it under 40 characters and start it with a verb, like "Build the pricing section".
+- Never put file paths, file names, commands, code or tool names in a step name.
+- For every request, even a quick question, call `plan_steps` first. Load it with ToolSearch if it's deferred. Then call `report_progress` as real progress happens, and with 100 the moment a step finishes.
+- If the session has TodoWrite or TaskCreate, Claude can use its to-do list as the plan instead.
+
+**3. Plan first (gate in `tool.call`)**
+Until a real plan exists, deny every other tool with a message telling Claude to call `plan_steps` first. Always allow ToolSearch, TodoWrite, TaskCreate, TaskUpdate and AskUserQuestion. Only gate the main agent, never subagents.
+
+**4. Fill the checklist from what Claude already does**
+- **On `turn.start`:** a real prompt (not a slash command) sent while nothing is running starts a new job. Show placeholder steps right away ("Understand your request", "Plan the steps") until the real plan arrives. In the background, ask Haiku with low effort for a 2 to 6 word name that starts with a verb, and swap it into the header. Ignore the answer if a newer job has started.
+- **TodoWrite, TaskCreate and TaskUpdate:** turn these into checklist rows.
+- **Permission prompts and questions** (`classic.Notification`, AskUserQuestion): switch to **Needs you**. Clear it once the next tool runs or I reply.
+- **Failures:** if I said no to a permission, show "Stuck: you said no to a step, so Claude paused". After 3 failed tool calls in a row, show "Stuck: a step keeps failing, Claude is trying another way". A success clears the Stuck state.
+- **On `turn.complete`:**
+  - An API error becomes one calm sentence. Rate limits: "you hit your usage limit, try again a little later". Overloaded: "Claude's servers are busy, try again in a minute". Context too long: "type /compact and try again". Network: "the internet connection dropped". Auth: "type /login".
+  - A refusal becomes "Claude couldn't help with that request".
+  - Esc becomes Stopped.
+  - If steps are left unfinished, show Needs you with "Claude is waiting for your reply".
+  - Otherwise show All done and collapse it after 5 seconds.
+
+**5. Hide the technical rows**
+While Clean View is on, render `ToolUse`, `ToolResult` and `ToolGroup` as hidden, and blank out the `ToolProgress` hint. Claude's normal written replies stay visible.
+
+**6. Turn it on and off**
+- Use the button described above, plus a `/simple on|off` command. With no argument, the command flips the setting.
+- Keep the setting in plugin state and save it with `$.store` so it survives restarts.
+- Clean View starts on.
+- When it's off, every hidden row comes back, the rest of the band renders as normal and only the button stays.
+
+## Details that matter
+
+- **Plain names, always.** Every name passes through one cleaner. It strips backtick code, anything with a slash and file names with a code extension, collapses whitespace and capitalises the first letter. Names longer than 40 characters are trimmed at a word boundary and get "…". If nothing is left, use "Working on it".
+- **Animation.** A 250ms clock advances a frame counter only while a job is working or waiting on me. No timers run while idle.
+- **Narrow terminals.** Size the name column from `bodyColumns` so rows never wrap. The meter is always 10 cells.
+- **Surveys.** If the band is showing a survey (`hasSurvey`), stay out of the way.
+- **Shared state.** Keep state under the plugin's own key, typed in `types/index.d.ts`, so future mods can read the checklist: `cleanViewEnabled`, `checklist` (title, phase, tasks of `{ id, name, status: done|active|upcoming, percent, hasReported }`, needsYouReason, stuckReason, startedAt, finishedAt, isCollapsed) and `tick`.
+- **Structure.** Use one `register.tsx` that calls `registerCleanView(on)` from `clean-view.tsx`, so more mods can be added next to it later.
+
+## Tests (run with `claude plugin test`)
+
+1. A name like "Build the pricing section in \`src/Pricing.tsx\`" cleans up to "Build the pricing section in". A path disappears from the middle of a sentence. An 80-character name trims to 40 or less.
+2. A to-do list plus a 60% report renders ✓ / ▶ 60% / Next / Up next rows, on both the terminal and desktop surfaces.
+3. A permission prompt shows **Needs you**.
+4. `/simple off` hides the band.
+5. `plan_steps` followed by `report_progress` at 100 checks off step one and starts step two.
+6. Any tool is denied before a plan exists and allowed after.
+
+## Done means
+
+- I send any request, and the plan appears within a second or two, with no tool rows showing.
+- The meter moves as the work happens. When the job finishes I see "✓ All done · took …", and 5 seconds later it shrinks to one line.
+- A permission prompt turns the header into **Needs you** right away.
+- One click on the button shows every hidden row again. The choice is remembered after a restart.
+- All the tests pass.
+
+When you're done, tell me in plain English how to turn it on, how to turn it off and how to install it on another computer.
