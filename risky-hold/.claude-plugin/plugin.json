@@ -1,0 +1,6 @@
+{
+  "name": "risky-hold",
+  "version": "0.1.0",
+  "description": "Holds a destructive shell command (recursive delete, git reset --hard, force push, disk or database wipe) until you say run it",
+  "author": { "name": "Broo37" }
+}

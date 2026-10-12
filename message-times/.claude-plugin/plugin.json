@@ -1,0 +1,6 @@
+{
+  "name": "message-times",
+  "version": "0.1.0",
+  "description": "Shows when each prompt you sent was sent, at the right of its row in the transcript",
+  "author": { "name": "Broo37" }
+}

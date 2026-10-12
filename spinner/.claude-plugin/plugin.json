@@ -1,0 +1,14 @@
+{
+  "name": "spinner",
+  "version": "0.1.0",
+  "description": "Draws the line that moves while Claude works as a face eating a bar of blocks, with wording of your own",
+  "author": { "name": "Broo37" },
+  "userConfig": {
+    "format": {
+      "type": "string",
+      "title": "Wording",
+      "description": "What the line says while Claude works; {} stands for the verb",
+      "default": "Iwan will get {}..."
+    }
+  }
+}

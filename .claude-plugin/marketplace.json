@@ -7,6 +7,41 @@
       "name": "clean-view",
       "source": "./clean-view",
       "description": "Hides tool calls, diffs and command output while Claude works, and shows the plan as a checklist above the prompt"
+    },
+    {
+      "name": "status-band",
+      "source": "./status-band",
+      "description": "The Awesome Statusline layout as a band above the prompt: model, git, context, 5H/7D limits and Codex 7D"
+    },
+    {
+      "name": "transcript-makeover",
+      "source": "./transcript-makeover",
+      "description": "Ends every tool row with a check or a red cross and how long the call took, and every turn with a receipt: time, tools, failures, cost and share of the five-hour limit"
+    },
+    {
+      "name": "tool-waterfall",
+      "source": "./tool-waterfall",
+      "description": "A pane that charts the tool calls of the turn as bars along its time, like a browser's network tab; opened and closed with /waterfall"
+    },
+    {
+      "name": "risky-hold",
+      "source": "./risky-hold",
+      "description": "Holds a destructive shell command (recursive delete, git reset --hard, force push, disk or database wipe) until you say run it"
+    },
+    {
+      "name": "message-times",
+      "source": "./message-times",
+      "description": "Shows when each prompt you sent was sent, at the right of its row in the transcript"
+    },
+    {
+      "name": "spinner",
+      "source": "./spinner",
+      "description": "Draws the line that moves while Claude works as a face eating a bar of blocks, with wording of your own"
+    },
+    {
+      "name": "rainbow-prompt",
+      "source": "./rainbow-prompt",
+      "description": "Colors the prompt box as you type: ticket ids, paths, links, rainbow words, and a red warning on anything that looks like a secret"
     }
   ]
 }

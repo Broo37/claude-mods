@@ -1,0 +1,14 @@
+{
+  "name": "rainbow-prompt",
+  "version": "0.1.0",
+  "description": "Colors the prompt box as you type: ticket ids, paths, links, rainbow words, and a red warning on anything that looks like a secret",
+  "author": { "name": "Broo37" },
+  "userConfig": {
+    "words": {
+      "type": "string",
+      "title": "Rainbow words",
+      "description": "The words painted a color a letter, commas between them",
+      "default": "ultrathink"
+    }
+  }
+}

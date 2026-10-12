@@ -1,0 +1,6 @@
+{
+  "name": "transcript-makeover",
+  "version": "0.1.0",
+  "description": "Ends every tool row with a check or a red cross and how long the call took, and every turn with a receipt: time, tools, failures, cost and share of the five-hour limit",
+  "author": { "name": "Broo37" }
+}

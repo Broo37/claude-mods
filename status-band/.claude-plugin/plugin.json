@@ -1,0 +1,51 @@
+{
+  "name": "status-band",
+  "version": "0.1.0",
+  "description": "The Awesome Statusline layout as a band above the prompt: model, git, context, 5H/7D limits and Codex 7D",
+  "author": { "name": "Broo37" },
+  "types": "./types/index.d.ts",
+  "userConfig": {
+    "size": {
+      "type": "string",
+      "title": "Size",
+      "description": "How much the band shows, from two compact rows to six full ones",
+      "default": "xlarge",
+      "options": [
+        "xsmall",
+        "small",
+        "medium",
+        "large",
+        "xlarge"
+      ]
+    },
+    "animate": {
+      "type": "boolean",
+      "title": "Animate bars",
+      "description": "Sweep a glint across the bars when a reading changes and while Claude works",
+      "default": true
+    },
+    "position": {
+      "type": "string",
+      "title": "Position",
+      "description": "Where the band stands: above the prompt, or below it under Claude Code's own mode line",
+      "default": "above",
+      "options": [
+        "above",
+        "below"
+      ]
+    },
+    "pet": {
+      "type": "string",
+      "title": "Pet",
+      "description": "The creature under the list of sessions: it sleeps while idle, walks while Claude works, hops when a turn ends",
+      "default": "crab",
+      "options": [
+        "crab",
+        "cat",
+        "ghost",
+        "smiley",
+        "off"
+      ]
+    }
+  }
+}
