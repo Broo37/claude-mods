@@ -72,6 +72,13 @@ const stampOf = (tree: Drawn) =>
 
 const ENGINE_ROW = (text: string) => ({ type: 'Text', props: {}, children: [`> ${text}`] })
 
+// Since 2.1.301 the test engine tags a tree it drew itself with a `part`: the rest is what has to be left alone.
+const untagged = (tree?: Drawn) => {
+  const { part, ...rest } = (tree ?? {}) as Drawn & { part?: unknown }
+
+  return rest
+}
+
 test('shows a prompt the time it was sent at, dim, at the right of its row', async ($, on) => {
   boot(on)
   await send($, 'hi there')
@@ -80,7 +87,7 @@ test('shows a prompt the time it was sent at, dim, at the right of its row', asy
 
   // The time stands on the last line of the row Claude Code draws, which starts with an empty one.
   expect(tree.props?.alignItems).toBe('flex-end')
-  expect(row).toEqual(ENGINE_ROW('hi there'))
+  expect(untagged(row)).toEqual(ENGINE_ROW('hi there'))
   expect(gap?.props?.flexGrow).toBe(1)
   expect(stamp?.children).toEqual(['08:45'])
   expect(stamp?.props?.dimColor).toBe(true)
@@ -105,14 +112,14 @@ test('shows the row of a prompt still on its way the time it is', async ($, on) 
 test('leaves a row sent before it was there as Claude Code draws it', async ($, on) => {
   boot(on)
 
-  expect(await rowOf($, 'old', 'from last week')).toEqual(ENGINE_ROW('from last week'))
+  expect(untagged(await rowOf($, 'old', 'from last week'))).toEqual(ENGINE_ROW('from last week'))
 })
 
 test('leaves a row that is not the prompt of the person alone', async ($, on) => {
   boot(on)
   await send($, 'build finished')
 
-  expect(await rowOf($, 'n1', 'build finished', { kind: 'task-notification' })).toEqual(ENGINE_ROW('build finished'))
+  expect(untagged(await rowOf($, 'n1', 'build finished', { kind: 'task-notification' }))).toEqual(ENGINE_ROW('build finished'))
 })
 
 test('gives two prompts of the same words each its own time', async ($, on) => {

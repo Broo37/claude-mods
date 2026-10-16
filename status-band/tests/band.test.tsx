@@ -851,11 +851,18 @@ const underPrompt = async ($: Engine, surface: 'terminal' | 'desktop' = 'termina
   return tree
 }
 
+// Since 2.1.301 the test engine tags a tree it drew itself with a `part`: the rest is what has to be left alone.
+const untagged = (tree?: Drawn) => {
+  const { part, ...rest } = (tree ?? {}) as Drawn & { part?: unknown }
+
+  return rest
+}
+
 test('leaves the line under the prompt to Claude Code while it stands above', async ($, on) => {
   const { clock } = boot(on)
   await start($, clock)
 
-  expect(await underPrompt($)).toEqual({ type: 'Text', props: {}, children: ['engine hint'] })
+  expect(untagged(await underPrompt($))).toEqual({ type: 'Text', props: {}, children: ['engine hint'] })
   expect((await rowsOf($))[3]).toBe('🧠 Context  [bar 40] 43% used (86k/200k)')
 })
 
@@ -944,7 +951,7 @@ test('pulls nothing back on a surface that draws no pill before the hint', BELOW
 test('leaves the line under the prompt alone before its first reading', BELOW, async ($, on) => {
   boot(on)
 
-  expect(await underPrompt($)).toEqual({ type: 'Text', props: {}, children: ['engine hint'] })
+  expect(untagged(await underPrompt($))).toEqual({ type: 'Text', props: {}, children: ['engine hint'] })
 })
 
 test('sweeps its glint under the prompt too', BELOW, async ($, on) => {

@@ -108,6 +108,13 @@ const textsOf = (tree: Drawn) => (tree.children ?? []).map(part => ((part as Dra
 
 const ENGINE_LINE = (durationMs: number) => ({ type: 'Text', props: {}, children: [`✻ Baked for ${durationMs}`] })
 
+// Since 2.1.301 the test engine tags a tree it drew itself with a `part`: the rest is what has to be left alone.
+const untagged = (tree?: Drawn) => {
+  const { part, ...rest } = (tree ?? {}) as Drawn & { part?: unknown }
+
+  return rest
+}
+
 const finish = async ($: Engine, clock: MockClock, durationMs: number, more: Record<string, unknown> = {}) => {
   await $.turn.complete({ ...TURN, durationMs, ...more })
   await clock.settle()
@@ -119,7 +126,7 @@ test('ends the row of a call that went well with a green check and how long it t
   const tree = await rowOf($, 'c1')
   const [row, gap, holder] = (tree.children ?? []) as Drawn[]
 
-  expect(row).toEqual(ENGINE_ROW('Bash'))
+  expect(untagged(row)).toEqual(ENGINE_ROW('Bash'))
   expect(gap?.props?.flexGrow).toBe(1)
   expect(badgeIn(tree)).toEqual({ text: '✓ 2.2s', color: 'success' })
   // The row Claude Code draws begins with an empty line: the badge stands on the next, which names the tool.
@@ -154,8 +161,8 @@ test('hands the answer of a call on as it came', async ($, on) => {
 test('leaves a row alone while its call has not ended', async ($, on) => {
   boot(on)
 
-  expect(await rowOf($, 'c1', { isRunning: true })).toEqual(ENGINE_ROW('Bash'))
-  expect(await rowOf($, 'c1')).toEqual(ENGINE_ROW('Bash'))
+  expect(untagged(await rowOf($, 'c1', { isRunning: true }))).toEqual(ENGINE_ROW('Bash'))
+  expect(untagged(await rowOf($, 'c1'))).toEqual(ENGINE_ROW('Bash'))
 })
 
 test('marks a failed call it did not time with a cross alone', async ($, on) => {
@@ -168,7 +175,7 @@ test('leaves a row alone off the terminal, where it is not laid out the same', a
   const { world } = boot(on)
   await call($, world, 'c1', 2238)
 
-  expect(await rowOf($, 'c1', {}, 'desktop')).toEqual(ENGINE_ROW('Bash'))
+  expect(untagged(await rowOf($, 'c1', {}, 'desktop'))).toEqual(ENGINE_ROW('Bash'))
 })
 
 test('ends a turn with its receipt: time, tools, failures, cost, share of the limit, and when it ended', async ($, on) => {
@@ -237,7 +244,7 @@ test('leaves out of the receipt what the turn did not have', async ($, on) => {
 test('leaves the line of a turn it did not see as Claude Code draws it', async ($, on) => {
   boot(on)
 
-  expect(await lineOf($, 'old', 5000)).toEqual(ENGINE_LINE(5000))
+  expect(untagged(await lineOf($, 'old', 5000))).toEqual(ENGINE_LINE(5000))
 })
 
 test('keeps each turn its own receipt, however often its line is drawn', async ($, on) => {
@@ -278,7 +285,7 @@ test("counts neither a subagent's calls nor the end of a subagent's turn", async
   await finish($, clock, 2000, { turnId: 't9', agentId: 'a1' })
 
   // The subagent's turn ended; the main one has no receipt yet.
-  expect(await lineOf($, 'sub', 2000)).toEqual(ENGINE_LINE(2000))
+  expect(untagged(await lineOf($, 'sub', 2000))).toEqual(ENGINE_LINE(2000))
 
   await finish($, clock, 8000)
 

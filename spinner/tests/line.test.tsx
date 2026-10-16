@@ -82,8 +82,14 @@ const boot = (on: On) => {
   return { world, clock }
 }
 
-// Matched, not equaled: since 2.1.301 the test engine tags its own tree with the plugin that passed it on
 const ENGINE_LINE = (word: string) => ({ type: 'Text', props: {}, children: [`* ${word}`] })
+
+// Since 2.1.301 the test engine tags a tree it drew itself with a `part`: the rest is what has to be left alone.
+const untagged = (tree?: Drawn) => {
+  const { part, ...rest } = (tree ?? {}) as Drawn & { part?: unknown }
+
+  return rest
+}
 
 const start = async ($: Engine, clock: MockClock) => {
   await $.session.start({ cwd: 'C:\\work', surface: 'terminal', isInteractive: true })
@@ -218,14 +224,14 @@ test('leaves the line as Claude Code draws it before the turn has a verb', async
   const { clock } = boot(on)
   await begin($, clock)
 
-  expect(await show($, { word: '' })).toMatchObject(ENGINE_LINE(''))
+  expect(untagged(await show($, { word: '' }))).toEqual(ENGINE_LINE(''))
 })
 
 test('leaves the line as Claude Code draws it where there is no raster', async ($, on) => {
   const { clock } = boot(on)
   await begin($, clock)
 
-  expect(await show($, {}, 'desktop')).toMatchObject(ENGINE_LINE('Baking'))
+  expect(untagged(await show($, {}, 'desktop'))).toEqual(ENGINE_LINE('Baking'))
 })
 
 test('moves the strip every 80 ms without the line being drawn again', async ($, on) => {
