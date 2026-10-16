@@ -1,12 +1,13 @@
 import type { EngineInterface, Register, Timer } from 'claude-code'
 
-import { FRAME_MS, FRAMES } from './frames'
-import { CLAUDE_ORANGE, cellsOf, claudeIn, elapsedOf, frameAt, saidOf, themeFile } from './strip'
+import { lookOf } from './looks'
+import { CLAUDE_ORANGE, cellsAt, claudeIn, elapsedOf, saidOf, themeFile } from './strip'
 
 // The raster the strip is drawn in, by the name a repaint finds it under.
 const STRIP = 'strip'
 
-const COLUMNS = FRAMES[0]?.length ?? 0
+// The strip the person picked to have drawn.
+let look = lookOf(undefined)
 
 // How long after a second is full the line is drawn again, to be sure it is.
 const SLACK_MS = 15
@@ -35,6 +36,8 @@ let isMoving = false
 
 // The redraw waiting for the second to turn, while one waits.
 let second: Timer | null = null
+
+const columns = () => look.frames[0]?.length ?? 0
 
 async function tint($: EngineInterface) {
   try {
@@ -69,11 +72,11 @@ async function move($: EngineInterface) {
     const now = await $.clock.now()
 
     for (const line of [...moving]) {
-      const cells = cellsOf(frameAt(FRAMES, now - (since.get(line) ?? now), FRAME_MS), color)
+      const cells = cellsAt(look, now - (since.get(line) ?? now), color)
       let isGone = false
 
       try {
-        isGone = (await $.ui.blit({ requestId: line, key: STRIP, columns: COLUMNS, rows: 1, cells })).deny !== undefined
+        isGone = (await $.ui.blit({ requestId: line, key: STRIP, columns: columns(), rows: 1, cells })).deny !== undefined
       } catch {
         isGone = true
       }
@@ -94,6 +97,7 @@ async function move($: EngineInterface) {
 
 export const register: Register = (on, options) => {
   wording = typeof options.format === 'string' && options.format.trim() !== '' ? options.format : WORDING
+  look = lookOf(options.style)
 
   on('session.start', ($, e, next) => {
     $.clock.after(0, () => void tint($))
@@ -133,7 +137,7 @@ export const register: Register = (on, options) => {
     const began = since.get(e.requestId) ?? turnAt ?? now
     since.set(e.requestId, began)
     moving.add(e.requestId)
-    mover ??= $.clock.every(FRAME_MS, () => void move($))
+    mover ??= $.clock.every(look.frameMs, () => void move($))
     // The strip moves without a redraw, the time does not: the line is drawn
     // again each time a second is full, for as long as that draws it.
     second ??= $.clock.after(1000 - ((now - began) % 1000) + SLACK_MS, () => {
@@ -147,7 +151,7 @@ export const register: Register = (on, options) => {
     // Claude Code's own line stands a row below the transcript.
     return (
       <Box marginTop={1}>
-        <Raster key={STRIP} columns={COLUMNS} rows={1} cells={cellsOf(frameAt(FRAMES, now - began, FRAME_MS), color)} />
+        <Raster key={STRIP} columns={columns()} rows={1} cells={cellsAt(look, now - began, color)} />
         <Text color="claude">{` ${saidOf(wording, e.props)}`}</Text>
         <Text dimColor>{` (${elapsedOf(now - began)}${note})`}</Text>
       </Box>

@@ -1,9 +1,16 @@
 {
   "name": "spinner",
-  "version": "0.1.0",
-  "description": "Draws the line that moves while Claude works as a face eating a bar of blocks, with wording of your own",
+  "version": "0.2.0",
+  "description": "Draws the line that moves while Claude works as an equalizer, a rainbow wave, a comet, a game of pong or a face eating a bar of blocks, with wording of your own",
   "author": { "name": "Broo37" },
   "userConfig": {
+    "style": {
+      "type": "string",
+      "title": "Animation",
+      "description": "What moves while Claude works: an equalizer of bars, a wave in rainbow colors, a comet with a fading tail, a ball between two paddles, or the smiley eating a bar of blocks",
+      "options": ["equalizer", "rainbow", "comet", "pong", "smiley"],
+      "default": "equalizer"
+    },
     "format": {
       "type": "string",
       "title": "Wording",

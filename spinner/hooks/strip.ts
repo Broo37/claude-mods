@@ -4,24 +4,55 @@ const DEFAULT_COLOR = 0x01000000
 // The orange Claude Code's own themes draw its mark in.
 export const CLAUDE_ORANGE = 0xd77757
 
-// Which frame shows that long into a turn; the frames go round for as long as it lasts.
-export const frameAt = (frames: readonly string[], elapsedMs: number, frameMs: number) =>
-  frames[Math.floor(Math.max(0, elapsedMs) / frameMs) % Math.max(1, frames.length)] ?? ''
+// A bar at each of its eight heights, the lowest first. Every one is a single
+// column wide, which is what a raster cell holds.
+export const HEIGHTS = '▁▂▃▄▅▆▇█'
+
+// Which of a round of frames shows that long into a turn, counted from 0; the
+// frames go round for as long as it lasts.
+export const frameNo = (count: number, elapsedMs: number, frameMs: number) =>
+  Math.floor(Math.max(0, elapsedMs) / frameMs) % Math.max(1, count)
+
+// The color of one cell of a frame, for a strip that is not all of one color:
+// from the strip's color, the cell's character, its column and the number of
+// the frame in the round.
+export type Ink = (color: number, codePoint: number, column: number, frame: number) => number
+
+// A strip that can be drawn: its frames, how long each stays in milliseconds,
+// and its ink, where its cells are not all drawn in the strip's color.
+export type Look = { frames: readonly string[]; frameMs: number; ink?: Ink }
+
+// A color at a part of its brightness, 0 to 1.
+export const lit = (color: number, part: number) => {
+  const share = Math.min(1, Math.max(0, part))
+  const channel = (shift: number) => Math.round(((color >> shift) & 0xff) * share) << shift
+
+  return channel(16) | channel(8) | channel(0)
+}
 
 // A frame as the cells of a one-row Raster, [code point, foreground, background]
 // of u32 each. A raster is repainted in place, where a text would have the whole
-// line drawn again, and that no more than ten times a second.
-export const cellsOf = (frame: string, color: number) => {
+// line drawn again, and that no more than ten times a second. With an ink, each
+// cell is drawn in the color the ink has for its character and its column.
+export const cellsOf = (frame: string, color: number, ink?: (codePoint: number, column: number) => number) => {
   const words = new Uint32Array(frame.length * 3)
 
   for (let cell = 0; cell < frame.length; cell++) {
-    words[cell * 3] = frame.codePointAt(cell) ?? 0x20
-    words[cell * 3 + 1] = color
+    const codePoint = frame.codePointAt(cell) ?? 0x20
+    words[cell * 3] = codePoint
+    words[cell * 3 + 1] = ink === undefined ? color : ink(codePoint, cell)
     words[cell * 3 + 2] = DEFAULT_COLOR
   }
 
   // A mod's environment has Uint8Array's base64 methods; the es2023 lib does not name them.
   return (new Uint8Array(words.buffer) as Uint8Array & { toBase64(): string }).toBase64()
+}
+
+// The strip of a look as a raster takes it, that long into a turn.
+export const cellsAt = ({ frames, frameMs, ink }: Look, elapsedMs: number, color: number) => {
+  const frame = frameNo(frames.length, elapsedMs, frameMs)
+
+  return cellsOf(frames[frame] ?? '', color, ink && ((codePoint, column) => ink(color, codePoint, column, frame)))
 }
 
 type Said = { word: string; message: string | null; suffix: string }

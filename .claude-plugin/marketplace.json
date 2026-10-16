@@ -36,7 +36,7 @@
     {
       "name": "spinner",
       "source": "./spinner",
-      "description": "Draws the line that moves while Claude works as a face eating a bar of blocks, with wording of your own"
+      "description": "Draws the line that moves while Claude works as an equalizer, a rainbow wave, a comet, a game of pong or a face eating a bar of blocks, with wording of your own"
     },
     {
       "name": "rainbow-prompt",

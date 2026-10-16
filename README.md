@@ -10,7 +10,7 @@ Mods for [Claude Code](https://claude.com/claude-code): plugins of function hook
 | `tool-waterfall` | A pane that charts the tool calls of the turn as bars along its time, like a browser's network tab | `/waterfall` opens and closes it |
 | `risky-hold` | Holds a destructive shell command (recursive delete, `git reset --hard`, force push, disk or database wipe) until you say run it | |
 | `message-times` | Shows when each prompt you sent was sent, at the right of its row in the transcript | |
-| `spinner` | Draws the line that moves while Claude works as a face eating a bar of blocks, with wording of your own | `format` |
+| `spinner` | Draws the line that moves while Claude works as an equalizer, a rainbow wave, a comet, a game of pong or a face eating a bar of blocks, with wording of your own | `style`, `format` |
 | `rainbow-prompt` | Colors the prompt box as you type: ticket ids, paths, links, rainbow words, and a red warning on anything that looks like a secret | `words` |
 
 ## Install
@@ -86,4 +86,4 @@ The scripts under `status-band/tools` and `rainbow-prompt/tools` start a real se
 ## Credits
 
 - The palette, gradients and wording of `status-band` are ported from [Awesome Statusline](https://github.com/AwesomeJun/CC-statusline) by AwesomeJun (MIT, see `status-band/LICENSE-awesome-statusline.txt`).
-- The frames of `spinner` are carried over from a spinner set up in [tweakcc](https://github.com/Piebald-AI/tweakcc).
+- The frames of the `smiley` animation of `spinner` are carried over from a spinner set up in [tweakcc](https://github.com/Piebald-AI/tweakcc).

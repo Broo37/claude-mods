@@ -2,8 +2,10 @@ import { expect, mock, test } from 'claude-code/testing'
 import type { Engine, MockClock } from 'claude-code/testing'
 import type { On } from 'claude-code'
 
+import { EQUALIZER } from '../hooks/equalizer'
 import { FRAMES } from '../hooks/frames'
-import { CLAUDE_ORANGE, cellsOf } from '../hooks/strip'
+import { RAINBOW } from '../hooks/rainbow'
+import { CLAUDE_ORANGE, cellsAt, cellsOf } from '../hooks/strip'
 
 const NOW = new Date(2026, 9, 7, 8, 45).getTime()
 
@@ -80,6 +82,7 @@ const boot = (on: On) => {
   return { world, clock }
 }
 
+// Matched, not equaled: since 2.1.301 the test engine tags its own tree with the plugin that passed it on
 const ENGINE_LINE = (word: string) => ({ type: 'Text', props: {}, children: [`* ${word}`] })
 
 const start = async ($: Engine, clock: MockClock) => {
@@ -113,6 +116,9 @@ const timeOf = (tree: Drawn) => partsOf(tree)[2]?.children?.[0]
 
 const stripOf = (tree: Drawn) => partsOf(tree)[0]?.props?.cells
 
+// The cells of a frame of the equalizer, the strip drawn when no other is picked.
+const barsAt = (frame: number, color = CLAUDE_ORANGE) => cellsAt(EQUALIZER, frame * 80, color)
+
 test('draws the strip, the wording and the time in place of the line', async ($, on) => {
   const { clock } = boot(on)
   await begin($, clock)
@@ -124,7 +130,7 @@ test('draws the strip, the wording and the time in place of the line', async ($,
   expect(strip?.props?.key).toBe('strip')
   expect(strip?.props?.columns).toBe(12)
   expect(strip?.props?.rows).toBe(1)
-  expect(strip?.props?.cells).toBe(cellsOf(FRAMES[0] ?? '', CLAUDE_ORANGE))
+  expect(strip?.props?.cells).toBe(barsAt(0))
   expect(words?.children).toEqual([' Iwan will get Baking...'])
   expect(words?.props?.color).toBe('claude')
   expect(time?.children).toEqual([' (0s)'])
@@ -145,8 +151,8 @@ test('counts the time from the start of the turn', async ($, on) => {
   const tree = await show($)
 
   expect(timeOf(tree)).toBe(' (12s)')
-  // 12.4 s is frame 155, which is the 23rd of the second round.
-  expect(stripOf(tree)).toBe(cellsOf(FRAMES[22] ?? '', CLAUDE_ORANGE))
+  // 12.4 s is frame 155, which is the 60th of the second round.
+  expect(stripOf(tree)).toBe(barsAt(59))
 })
 
 test('counts from when the line first showed, when no turn was seen to start', async ($, on) => {
@@ -212,14 +218,14 @@ test('leaves the line as Claude Code draws it before the turn has a verb', async
   const { clock } = boot(on)
   await begin($, clock)
 
-  expect(await show($, { word: '' })).toEqual(ENGINE_LINE(''))
+  expect(await show($, { word: '' })).toMatchObject(ENGINE_LINE(''))
 })
 
 test('leaves the line as Claude Code draws it where there is no raster', async ($, on) => {
   const { clock } = boot(on)
   await begin($, clock)
 
-  expect(await show($, {}, 'desktop')).toEqual(ENGINE_LINE('Baking'))
+  expect(await show($, {}, 'desktop')).toMatchObject(ENGINE_LINE('Baking'))
 })
 
 test('moves the strip every 80 ms without the line being drawn again', async ($, on) => {
@@ -228,16 +234,41 @@ test('moves the strip every 80 ms without the line being drawn again', async ($,
   await show($)
   await clock.advance(80)
 
-  expect(world.blits).toEqual([
-    { requestId: LINE, key: 'strip', columns: 12, rows: 1, cells: cellsOf(FRAMES[1] ?? '', CLAUDE_ORANGE) },
-  ])
+  expect(world.blits).toEqual([{ requestId: LINE, key: 'strip', columns: 12, rows: 1, cells: barsAt(1) }])
 
   await clock.advance(160)
 
-  expect(world.blits.map(blit => blit.cells)).toEqual(
-    [1, 2, 3].map(frame => cellsOf(FRAMES[frame] ?? '', CLAUDE_ORANGE)),
-  )
+  expect(world.blits.map(blit => blit.cells)).toEqual([1, 2, 3].map(frame => barsAt(frame)))
   expect(world.redraws).toBe(0)
+})
+
+test('draws the smiley strip when the person picked it', { options: { style: 'smiley' } }, async ($, on) => {
+  const { world, clock } = boot(on)
+  await begin($, clock)
+
+  expect(stripOf(await show($))).toBe(cellsOf(FRAMES[0] ?? '', CLAUDE_ORANGE))
+
+  await clock.advance(80)
+
+  expect(world.blits.map(blit => blit.cells)).toEqual([cellsOf(FRAMES[1] ?? '', CLAUDE_ORANGE)])
+})
+
+test('draws and moves the strip the person picked, in its own colors', { options: { style: 'rainbow' } }, async ($, on) => {
+  const { world, clock } = boot(on)
+  await begin($, clock)
+
+  expect(stripOf(await show($))).toBe(cellsAt(RAINBOW, 0, CLAUDE_ORANGE))
+
+  await clock.advance(160)
+
+  expect(world.blits.map(blit => blit.cells)).toEqual([80, 160].map(elapsed => cellsAt(RAINBOW, elapsed, CLAUDE_ORANGE)))
+})
+
+test('draws the equalizer for a pick it does not know', { options: { style: 'disco' } }, async ($, on) => {
+  const { clock } = boot(on)
+  await begin($, clock)
+
+  expect(stripOf(await show($))).toBe(barsAt(0))
 })
 
 test('has the line drawn again when the second turns', async ($, on) => {
@@ -308,7 +339,7 @@ test("draws the strip in the claude color of the person's custom theme", async (
   await start($, clock)
   await begin($, clock)
 
-  expect(stripOf(await show($))).toBe(cellsOf(FRAMES[0] ?? '', PEACH))
+  expect(stripOf(await show($))).toBe(barsAt(0, PEACH))
 })
 
 test('looks for the theme under the home folder when no config folder is set', async ($, on) => {
@@ -319,7 +350,7 @@ test('looks for the theme under the home folder when no config folder is set', a
   await start($, clock)
   await begin($, clock)
 
-  expect(stripOf(await show($))).toBe(cellsOf(FRAMES[0] ?? '', PEACH))
+  expect(stripOf(await show($))).toBe(barsAt(0, PEACH))
 })
 
 test("draws the strip in Claude Code's orange when the theme cannot be read", async ($, on) => {
@@ -329,7 +360,7 @@ test("draws the strip in Claude Code's orange when the theme cannot be read", as
   await start($, clock)
   await begin($, clock)
 
-  expect(stripOf(await show($))).toBe(cellsOf(FRAMES[0] ?? '', CLAUDE_ORANGE))
+  expect(stripOf(await show($))).toBe(barsAt(0))
 })
 
 test('takes up a change of theme with the next turn', async ($, on) => {
@@ -340,5 +371,5 @@ test('takes up a change of theme with the next turn', async ($, on) => {
   world.theme = 'custom:maple'
   await begin($, clock)
 
-  expect(stripOf(await show($))).toBe(cellsOf(FRAMES[0] ?? '', PEACH))
+  expect(stripOf(await show($))).toBe(barsAt(0, PEACH))
 })
