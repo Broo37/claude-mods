@@ -1,7 +1,7 @@
 import { expect, test } from 'claude-code/testing'
 
 import { IDLE, REASONS, collapse, endTurn, needsYou, planSteps, reportProgress, startJob, stuck } from '../hooks/checklist'
-import { BUTTON, durationOf, headerOf, rowsOf } from '../hooks/rows'
+import { BUTTON, durationOf, headerOf, paneLinesOf, rowsOf, stripOf } from '../hooks/rows'
 import type { Run } from '../hooks/rows'
 import type { CleanViewChecklist } from '../types'
 
@@ -167,4 +167,98 @@ test('keeps the name column no wider than its longest name needs, and never unde
   const short = planSteps(startJob('Say hello', NOW), ['Say hello', 'Wave'], NOW)
 
   expect(linesOf(short)[1]).toBe(`${'○ Wave'.padEnd(24)}░░░░░░░░░░  Next`)
+})
+
+// The Checklist tab of the dock and the strip over the Waterfall tab: thirty
+// columns, what the dock leaves once the lines stand two off its edge.
+const NARROW = 30
+
+const paneOf = (list: CleanViewChecklist, now = NOW + 72_000, columns = NARROW, tick = 0) => paneLinesOf(list, now, columns, tick).map(textOf)
+
+const stripLinesOf = (list: CleanViewChecklist, now = NOW + 72_000, columns = NARROW, tick = 0) => stripOf(list, now, columns, tick).map(textOf)
+
+test('stacks the checklist in a narrow tab: the job, its state, then a line a step', () => {
+  expect(paneOf(halfway())).toEqual([
+    'Build my landing page',
+    '▶ Working · 1m 12s',
+    ' ',
+    '✓ Read your brand notes',
+    '▶ Build the pricing section',
+    '  ██████░░░░  60%',
+    '○ Add the contact form',
+    '○ Polish the footer',
+  ])
+})
+
+test('gives only the step at work a meter in a narrow tab, as it would in the band', () => {
+  const lines = paneLinesOf(planned(), NOW, NARROW, 0)
+
+  // Nothing reported yet: the meter sweeps.
+  expect(lines.map(textOf).slice(3, 5)).toEqual(['▶ Read your brand notes', '  ███░░░░░░░  Working'])
+  expect(lines[4]?.[1]).toMatchObject({ text: '███', color: 'claude' })
+  expect(lines[5]?.[1]).toMatchObject({ text: 'Build the pricing section', isDim: true })
+})
+
+test('cuts a long step name to the tab, and wraps the job and the reason it waits', () => {
+  const long = planSteps(startJob('Move the checklist of Clean View into the dock', NOW), ['Write the tests for the stacked layout'], NOW)
+  const lines = paneOf(needsYou(long, REASONS.ok), NOW, 24)
+
+  expect(lines).toEqual([
+    'Move the checklist of',
+    'Clean View into the dock',
+    ' Needs you ',
+    'Claude needs your OK to',
+    'continue',
+    ' ',
+    '‖ Write the tests for t…',
+    '  ░░░░░░░░░░  Paused',
+  ])
+  expect(lines.every(line => line.length <= 24)).toBe(true)
+})
+
+test('says in a narrow tab how a job ended', () => {
+  expect(paneOf(finished(), NOW + 200_000).slice(0, 2)).toEqual(['Build my landing page', '✓ All done · took 2m 14s'])
+  expect(paneOf(endTurn(planned(), { reason: 'aborted', answer: '' }, NOW + 9000)).slice(0, 2)).toEqual([
+    'Build my landing page',
+    '■ Stopped · you pressed Esc',
+  ])
+  expect(paneOf(stuck(planned(), REASONS.saidNo)).slice(1, 3)).toEqual(['⚠ Stuck', 'you said no to a step, so'])
+})
+
+test('keeps every step of a finished job in the tab, where the band shrinks it to one line', () => {
+  expect(paneOf(collapse(finished()), NOW + 200_000)).toHaveLength(7)
+})
+
+test('draws the checklist one row a step where the tab is wide enough for it', () => {
+  const wide = paneLinesOf(halfway(), NOW + 72_000, 60, 0)
+
+  expect(wide).toEqual([headerOf(halfway(), NOW + 72_000, 60, 0), ...rowsOf(halfway(), 0, 60)])
+})
+
+test('says in the tab that no job has run yet', () => {
+  expect(paneOf(IDLE)).toEqual(['No job yet: your next request', 'shows here as a checklist.'])
+})
+
+test('sums up a working job over the waterfall in two lines: the step it is on, then its meter', () => {
+  const strip = stripOf(halfway(), NOW + 72_000, NARROW, 0)
+
+  expect(strip.map(textOf)).toEqual(['▶ 2/4 Build the pricing secti…', '  ██████░░░░  60% · 1m 12s'])
+  expect(strip[0]?.[0]).toMatchObject({ text: '▶ ', color: 'claude' })
+  expect(strip[0]?.[1]).toMatchObject({ text: '2/4 ', isDim: true })
+  expect(strip[0]?.[2]).toMatchObject({ isBold: true })
+})
+
+test('sums up a job before its plan by the step it starts with, as the band does', () => {
+  expect(stripLinesOf(startJob('Build my landing page', NOW), NOW + 3000)).toEqual(['▶ 1/2 Understand your request', '  ███░░░░░░░  Working · 3s'])
+})
+
+test('sums up a held or ended job over the waterfall by what holds or ended it', () => {
+  expect(stripLinesOf(needsYou(halfway(), REASONS.ok))).toEqual([' Needs you  2/4', '  Claude needs your OK to con…'])
+  expect(stripLinesOf(stuck(halfway(), REASONS.failing))).toEqual(['⚠ Stuck · 2/4', '  a step keeps failing, Claud…'])
+  expect(stripLinesOf(endTurn(halfway(), { reason: 'aborted', answer: '' }, NOW + 9000))).toEqual(['■ Stopped · 2/4', '  you pressed Esc'])
+  expect(stripLinesOf(finished(), NOW + 200_000)).toEqual(['✓ All done · 4/4', '  took 2m 14s'])
+})
+
+test('puts nothing over the waterfall while no job has run', () => {
+  expect(stripOf(IDLE, NOW, NARROW, 0)).toEqual([])
 })

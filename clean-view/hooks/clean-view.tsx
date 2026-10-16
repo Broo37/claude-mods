@@ -25,7 +25,7 @@ import {
 } from './checklist'
 import type { TaskChange, Todo } from './checklist'
 import { cleanName, cleanTitle } from './names'
-import { BUTTON, NO_JOB, TABS, TAB_MARKS, headerOf, rowsOf } from './rows'
+import { BUTTON, NO_JOB, TABS, TAB_MARKS, headerOf, paneLinesOf, rowsOf, stripOf } from './rows'
 import type { Run } from './rows'
 import { NAMER, PLAN_FIRST, PLAN_STEPS, PLAN_TOOL, PROGRESS_TOOL, REPORT_PROGRESS, SECTION } from './words'
 import type { CleanViewChecklist as Checklist, CleanViewTab as Tab } from '../types'
@@ -62,6 +62,15 @@ const FAILURES = 3
 const BRACKETS = 4
 const GAP = 1
 
+// The Checklist tab of the dock beside the transcript, as wide as its other
+// tabs (Sessions, Waterfall), whose lines stand two columns off its edge as
+// these do. Where the dock has it placed, the band leaves the checklist to it.
+const GUTTER = 2
+const PANE = { id: 'checklist', title: TABS.checklist, columns: 30 + GUTTER }
+
+// Another mod's tab of the dock, which the job's status is put over.
+const WATERFALL = 'waterfall'
+
 const QUESTION = 'AskUserQuestion'
 
 // What Claude may call before a plan exists: the ways to make one, or to ask.
@@ -89,6 +98,9 @@ let shrinking: Timer | null = null
 let failures = 0
 let running = 0
 let wasAsked = false
+
+// The title the Checklist tab was last given.
+let shownTitle: string | null = null
 
 const lookOf = (run: Run) => ({
   wrap: 'truncate-end' as const,
@@ -157,9 +169,47 @@ function keepTime($: EngineInterface, list: Checklist) {
   }
 }
 
+// The tab's title carries the job's state, to be read while another tab is in front.
+const titleOf = (list: Checklist) => `${PANE.title}${TAB_MARKS[list.phase]}`
+
+async function openTab($: EngineInterface) {
+  shownTitle = titleOf(await read($, checklist))
+  await $.ui.open({ ...PANE, title: shownTitle })
+  // Placed, the tab takes the checklist over from the band.
+  $.ui.invalidate('ui.render')
+}
+
+async function closeTab($: EngineInterface) {
+  if ((await $.ui.panes()).some(pane => pane.id === PANE.id)) {
+    await $.ui.close({ id: PANE.id })
+  }
+}
+
+// Whether the Checklist tab is open and drawn: the band then leaves the checklist to it.
+async function isDocked($: EngineInterface) {
+  return (await $.ui.panes()).some(pane => pane.id === PANE.id && pane.isPlaced)
+}
+
+// Gives the tab the title the job's state calls for. A tab the person closed
+// is not opened again by it.
+async function retitle($: EngineInterface, list: Checklist) {
+  const title = titleOf(list)
+
+  if (title !== shownTitle && (await $.ui.panes()).some(pane => pane.id === PANE.id)) {
+    shownTitle = title
+    await $.ui.open({ ...PANE, title })
+  }
+}
+
 async function change($: EngineInterface, step: (list: Checklist) => Checklist) {
   const list = await update($, checklist, step)
   keepTime($, list)
+
+  try {
+    await retitle($, list)
+  } catch {
+    // The tab keeps the title it had; the checklist is right all the same.
+  }
 
   return list
 }
@@ -256,8 +306,13 @@ async function ask($: EngineInterface, reason: string) {
 async function setEnabled($: EngineInterface, isOn: boolean) {
   await update($, enabled, () => isOn)
 
-  // Off, it keeps no job and runs no timer.
-  if (!isOn) {
+  // Off, it keeps no job, runs no timer and has no tab; on, the tab is back.
+  if (isOn) {
+    if (await isWatched($)) {
+      await openTab($)
+    }
+  } else {
+    await closeTab($)
     failures = 0
     running = 0
     wasAsked = false
@@ -321,8 +376,26 @@ export const registerCleanView = (on: On): void => {
     // After a reload the job is where it was, and its clock starts again.
     keepTime($, await read($, checklist))
 
+    // The checklist is a tab of the dock, beside the other mods' tabs.
+    if ((await read($, enabled)) && (await isWatched($))) {
+      await openTab($)
+    }
+
     return next(e)
   })
+
+  // Closed by the person, the tab leaves the checklist to the band again: the
+  // band is drawn anew to take it up. Should that fail, the tab closes all the same.
+  on('ui.close', async ($, e, next) => {
+    const answer = await next(e)
+
+    if (e.id === PANE.id) {
+      shownTitle = null
+      $.ui.invalidate('ui.render')
+    }
+
+    return answer
+  }).catch(($, e, next) => next(e))
 
   on('command.run', { command: 'simple' }, async ($, e) => {
     const wanted = e.args.trim().toLowerCase()
@@ -484,6 +557,12 @@ export const registerCleanView = (on: On): void => {
     }
 
     const isOn = await read($, enabled)
+
+    // The checklist has its tab in the dock: the band is the other mods' alone.
+    if (isOn && (await isDocked($))) {
+      return next(e)
+    }
+
     const list = isOn ? await read($, checklist) : IDLE
     const frame = await read($, tick)
     const now = await $.clock.now()
@@ -550,4 +629,61 @@ export const registerCleanView = (on: On): void => {
       </Box>
     )
   })
+
+  // The Checklist tab: the job, what it is doing, its steps, and the switch.
+  on('ui.render', { component: 'Pane', requestId: PANE.id }, async ($, e) => {
+    const isOn = await read($, enabled)
+    const list = isOn ? await read($, checklist) : IDLE
+    const frame = await read($, tick)
+    const now = await $.clock.now()
+    const { Box, Button, Text } = $.ui.resolve(e)
+
+    return (
+      <Box flexDirection="column" paddingLeft={GUTTER}>
+        {paneLinesOf(list, now, e.props.bodyColumns - GUTTER, frame).map(runs => (
+          <Box>
+            {runs.map(run => (
+              <Text {...lookOf(run)}>{run.text}</Text>
+            ))}
+          </Box>
+        ))}
+        <Box marginTop={1}>
+          <Button key="clean-view" label={isOn ? BUTTON.on : BUTTON.off} onPress={() => flip($)} />
+        </Box>
+      </Box>
+    )
+  })
+
+  // Over the waterfall, another mod's tab of the dock, the job's status: the
+  // step it is on and how far, then a rule. With no job, or Clean View off,
+  // the waterfall is drawn as that mod draws it; so it is should this fail.
+  on('ui.render', { component: 'Pane', requestId: WATERFALL }, async ($, e, next) => {
+    const list = (await read($, enabled)) ? await read($, checklist) : IDLE
+    const theirs = await next(e)
+
+    if (list.phase === 'idle') {
+      return theirs
+    }
+
+    const frame = await read($, tick)
+    const now = await $.clock.now()
+    const columns = e.props.bodyColumns - GUTTER
+    const { Box, Text } = $.ui.resolve(e)
+
+    return (
+      <Box flexDirection="column">
+        {stripOf(list, now, columns, frame).map(runs => (
+          <Box paddingLeft={GUTTER}>
+            {runs.map(run => (
+              <Text {...lookOf(run)}>{run.text}</Text>
+            ))}
+          </Box>
+        ))}
+        <Box paddingLeft={GUTTER}>
+          <Text dimColor>{'─'.repeat(Math.max(0, columns))}</Text>
+        </Box>
+        {theirs}
+      </Box>
+    )
+  }).catch(($, e, next) => next(e))
 }

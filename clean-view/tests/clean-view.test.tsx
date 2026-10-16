@@ -56,6 +56,14 @@ const boot = (on: On) => {
     band: OWN_BAND as Drawn | typeof OWN_BAND,
     // Where the session draws: nowhere in a plain `claude -p` run.
     surfaces: ['terminal'] as ('terminal' | 'desktop')[],
+    // The dock: whether it has room for a pane opened unasked (no, as in a
+    // narrow terminal, unless a test says so), the panes open, and what the
+    // mod asked of it.
+    canDock: false,
+    panes: [] as string[],
+    opened: [] as { id: string; title?: string; columns?: number }[],
+    closed: [] as string[],
+    redraws: 0,
   }
   const clock = mock.clock(on, { now: NOW })
 
@@ -117,6 +125,30 @@ const boot = (on: On) => {
 
     return next(e)
   })
+  on('ui.open', ($, e) => {
+    world.opened.push({ id: e.id, title: e.title, columns: e.columns })
+    world.panes = [...new Set([...world.panes, e.id])]
+
+    return {
+      value: world.canDock ? { isPlaced: true as const } : { isPlaced: false as const, reason: 'opened unasked at 100 columns, under 144' },
+    }
+  })
+  on('ui.close', ($, e) => {
+    world.closed.push(e.id)
+    world.panes = world.panes.filter(id => id !== e.id)
+
+    return { value: undefined }
+  })
+  on('ui.panes', () => ({
+    value: world.panes.map(id => ({ id, title: id, isShown: id === world.panes.at(-1), isFocused: false, isPlaced: world.canDock })),
+  }))
+  on('ui.invalidate', () => {
+    world.redraws += 1
+
+    return { value: undefined }
+  })
+  // Another mod's pane, the waterfall's among them, as that mod draws it.
+  on('ui.render', { component: 'Pane' }, ($, e) => ({ type: 'Text', props: {}, children: [`${e.requestId} pane`] }))
   on('ui.render', { component: 'AbovePrompt' }, () => world.band as never)
   on('ui.render', { component: 'ToolUse' }, ($, e) => ({ type: 'Text', props: {}, children: [ENGINE_ROW(e.props.tool)] }))
   on('ui.render', { component: 'ToolResult' }, () => ({ type: 'Text', props: {}, children: ['⎿ result'] }))
@@ -1181,4 +1213,198 @@ test('comes to work as soon as the session draws somewhere', async ($, on) => {
 
   expect((await bash($)).deny).toMatch(/mcp__clean-view__plan_steps/)
   expect((await compose($, ['desktop'])).sections.at(-1)?.id).toBe('clean-view:steps')
+})
+
+// The dock beside the transcript: the Checklist tab is the mod's own pane, the
+// waterfall another mod's, which the mod puts the job's status over.
+const PANE_PROPS = { isFocused: false, bodyColumns: 32, placement: 'dock', scroll: { offset: 0, bodyRows: 30 }, view: {} }
+
+const RULE = '─'.repeat(30)
+
+const docked = (on: On) => {
+  const booted = boot(on)
+  booted.world.canDock = true
+
+  return booted
+}
+
+// A pane as lines of text.
+const paneOf = async ($: Engine, id: string) => {
+  const ui = await $.ui.mount({
+    plugin: 'clean-view',
+    component: 'Pane',
+    requestId: id,
+    surface: 'terminal',
+    props: { title: id, ...PANE_PROPS },
+  } as Parameters<Engine['ui']['mount']>[0])
+  const tree = (await ui.drawn()) as Drawn
+  await ui.unmount()
+
+  return tree.type === 'Text' ? [textOf(tree)] : (tree.children ?? []).map(textOf)
+}
+
+test('opens the checklist as a tab of the dock as the session starts, as wide as the other tabs', async ($, on) => {
+  const { world, clock } = docked(on)
+  await start($, clock)
+
+  expect(world.opened).toEqual([{ id: 'checklist', title: 'Checklist', columns: 32 }])
+  // The band is drawn again once the tab has its place, to leave the checklist to it.
+  expect(world.redraws).toBeGreaterThan(0)
+})
+
+test('opens no tab in a session nobody watches', async ($, on) => {
+  const { world, clock } = docked(on)
+  world.surfaces = []
+  await start($, clock)
+
+  expect(world.opened).toEqual([])
+})
+
+test('opens no tab while Clean View is off', async ($, on) => {
+  const { world, clock } = docked(on)
+  world.store = { enabled: false }
+  await start($, clock)
+
+  expect(world.opened).toEqual([])
+})
+
+test('draws the job, its steps and the switch in the Checklist tab', async ($, on) => {
+  const { clock } = docked(on)
+  await start($, clock)
+  await ask($, clock)
+  await plan($)
+
+  expect(await paneOf($, 'checklist')).toEqual([
+    'Build bakery landing page',
+    '▶ Working · 0s',
+    ' ',
+    '▶ Read your brand notes',
+    '  ███░░░░░░░  Working',
+    '○ Build the pricing section',
+    '○ Add the contact form',
+    '○ Polish the footer',
+    ON,
+  ])
+})
+
+test('says in the Checklist tab that no job has run yet', async ($, on) => {
+  const { clock } = docked(on)
+  await start($, clock)
+
+  expect(await paneOf($, 'checklist')).toEqual(['No job yet: your next request', 'shows here as a checklist.', ON])
+})
+
+test('leaves the band to the other mod while the checklist is in the dock', async ($, on) => {
+  const { world, clock } = docked(on)
+  world.band = STATUS_BAND
+  await start($, clock)
+  await ask($, clock)
+  await plan($)
+
+  expect(await allLines($)).toEqual(['status band'])
+})
+
+test("leaves the band to the engine's own drawing while the checklist is in the dock and no other mod draws there", async ($, on) => {
+  const { clock } = docked(on)
+  await start($, clock)
+  await ask($, clock)
+  await plan($)
+
+  expect(await bandTree($)).toEqual(OWN_BAND)
+})
+
+test('shows the checklist above the prompt again once its tab is closed, and does not open the tab again', async ($, on) => {
+  const { world, clock } = docked(on)
+  world.band = STATUS_BAND
+  await start($, clock)
+  await ask($, clock)
+  // The person closes the tab with its close mark.
+  world.panes = []
+  const opens = world.opened.length
+  await plan($)
+  await report($, 'Read your brand notes', 100)
+
+  const lines = await allLines($)
+
+  expect(lines[0]).toBe(`${TABS.checklist}${ON}`)
+  expect(lines[1]).toMatch(/^Build bakery landing page/)
+  expect(lines).toHaveLength(2 + PLAN.length)
+  expect(world.opened).toHaveLength(opens)
+})
+
+test('puts the status of the job over the waterfall: the step it is on, then its meter', async ($, on) => {
+  const { clock } = docked(on)
+  await start($, clock)
+  await ask($, clock)
+  await plan($)
+  await report($, 'Read your brand notes', 40)
+
+  expect(await paneOf($, 'waterfall')).toEqual(['▶ 1/4 Read your brand notes', '  ████░░░░░░  40% · 0s', RULE, 'waterfall pane'])
+})
+
+test('leaves the waterfall as it is before any job, and with Clean View off', async ($, on) => {
+  const { clock } = docked(on)
+  await start($, clock)
+
+  expect(await paneOf($, 'waterfall')).toEqual(['waterfall pane'])
+
+  await ask($, clock)
+  await plan($)
+  await simple($, 'off')
+
+  expect(await paneOf($, 'waterfall')).toEqual(['waterfall pane'])
+})
+
+test("leaves every other mod's pane alone", async ($, on) => {
+  const { clock } = docked(on)
+  await start($, clock)
+  await ask($, clock)
+  await plan($)
+
+  expect(await paneOf($, 'sessions')).toEqual(['sessions pane'])
+})
+
+test('closes the tab with /simple off and opens it again with /simple on', async ($, on) => {
+  const { world, clock } = docked(on)
+  await start($, clock)
+  await simple($, 'off')
+
+  expect(world.closed).toEqual(['checklist'])
+
+  await simple($, 'on')
+
+  expect(world.opened.map(pane => pane.id)).toEqual(['checklist', 'checklist'])
+  expect(world.panes).toEqual(['checklist'])
+})
+
+test('turns Clean View off from the switch in its tab', async ($, on) => {
+  const { world, clock } = docked(on)
+  await start($, clock)
+  const ui = await $.ui.mount({
+    plugin: 'clean-view',
+    component: 'Pane',
+    requestId: 'checklist',
+    surface: 'terminal',
+    props: { title: 'Checklist', ...PANE_PROPS },
+  } as Parameters<Engine['ui']['mount']>[0])
+  await ui.press({ key: 'clean-view' })
+  await ui.unmount()
+  await clock.settle()
+
+  expect(world.toasts).toEqual(['Clean View is off'])
+  expect(world.closed).toEqual(['checklist'])
+})
+
+test("marks the tab with the state of the job, for it to be read from another tab", async ($, on) => {
+  const { world, clock } = docked(on)
+  await start($, clock)
+  await ask($, clock)
+  await plan($)
+
+  expect(world.opened.at(-1)?.title).toBe('Checklist ▶')
+
+  await report($, 'Polish the footer', 100)
+  await finish($, clock)
+
+  expect(world.opened.at(-1)?.title).toBe('Checklist ✓')
 })

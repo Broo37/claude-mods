@@ -84,6 +84,38 @@ const fitted = (runs: readonly Run[], flexible: number, columns: number): Run[] 
     .filter(run => run.text !== '')
 }
 
+// The words of a text, a line as many as the room holds; a word longer than
+// the room is cut.
+const wrapped = (text: string, columns: number): string[] => {
+  const lines: string[] = []
+  let line = ''
+
+  for (const word of text.split(/\s+/).filter(part => part !== '')) {
+    const longer = line === '' ? word : `${line} ${word}`
+
+    if (longer.length <= columns) {
+      line = longer
+    } else {
+      if (line !== '') {
+        lines.push(line)
+      }
+
+      line = cut(word, columns)
+    }
+  }
+
+  return line === '' ? lines : [...lines, line]
+}
+
+// The badge of a job that waits on the person. It pulses slowly, to be seen
+// without shouting.
+const badgeOf = (tick: number): Run => ({
+  text: ' Needs you ',
+  color: 'warning',
+  isBold: true,
+  ...(tick % PULSE < PULSE / 2 && { isInverse: true }),
+})
+
 export const headerOf = (list: Checklist, now: number, columns: number, tick = 0): Run[] => {
   const started = list.startedAt ?? now
 
@@ -93,15 +125,7 @@ export const headerOf = (list: Checklist, now: number, columns: number, tick = 0
     case 'working':
       return fitted([{ text: list.title, isBold: true }, { text: ` · ${durationOf(now - started)}`, isDim: true }], 0, columns)
     case 'needs-you':
-      return fitted(
-        [
-          // The badge pulses slowly, to be seen without shouting.
-          { text: ' Needs you ', color: 'warning', isBold: true, ...(tick % PULSE < PULSE / 2 && { isInverse: true }) },
-          { text: ` ${list.needsYouReason ?? ''}` },
-        ],
-        1,
-        columns,
-      )
+      return fitted([badgeOf(tick), { text: ` ${list.needsYouReason ?? ''}` }], 1, columns)
     case 'stuck':
       return fitted([{ text: `⚠ Stuck: ${list.stuckReason ?? ''}`, color: 'warning' }], 0, columns)
     case 'stopped':
@@ -151,6 +175,22 @@ const markOf = (phase: Checklist['phase']): Run => {
   return phase === 'needs-you' || phase === 'stuck' ? { text: '‖ ', color: 'warning' } : { text: '▶ ', color: 'claude' }
 }
 
+// A meter that sweeps: a step at work that has reported nothing yet.
+const sweepOf = (tick: number): Run[] => meterOf(cell => (((cell - tick) % METER) + METER) % METER < SWEEP, 'claude')
+
+// The meter of the step at work and what follows it: its percent once
+// reported; else a sweep while the job works, and an empty meter while it is
+// held, where a sweep would say it still moved.
+const gaugeOf = (task: Task, phase: Checklist['phase'], tick: number): Run[] => {
+  if (task.hasReported) {
+    return [...meterOf(cell => cell < Math.round((task.percent * METER) / 100), 'claude'), { text: `  ${task.percent}%`, isBold: true }]
+  }
+
+  return phase === 'working'
+    ? [...sweepOf(tick), { text: '  Working' }]
+    : [{ text: '░'.repeat(METER), isDim: true }, { text: phase === 'stopped' ? '  Stopped' : '  Paused' }]
+}
+
 const rowOf = (task: Task, name: string, phase: Checklist['phase'], isNext: boolean, tick: number): Run[] => {
   if (task.status === 'done') {
     return [
@@ -163,22 +203,7 @@ const rowOf = (task: Task, name: string, phase: Checklist['phase'], isNext: bool
   }
 
   if (task.status === 'active') {
-    const mark = markOf(phase)
-
-    if (task.hasReported) {
-      return [
-        mark,
-        { text: name, isBold: true },
-        ...meterOf(cell => cell < Math.round((task.percent * METER) / 100), 'claude'),
-        { text: `  ${task.percent}%`, isBold: true },
-      ]
-    }
-
-    // Nothing was reported yet: the meter sweeps while the job works, and
-    // stands empty while it is held, where a sweep would say it still moved.
-    return phase === 'working'
-      ? [mark, { text: name, isBold: true }, ...meterOf(cell => (((cell - tick) % METER) + METER) % METER < SWEEP, 'claude'), { text: '  Working' }]
-      : [mark, { text: name, isBold: true }, { text: '░'.repeat(METER), isDim: true }, { text: phase === 'stopped' ? '  Stopped' : '  Paused' }]
+    return [markOf(phase), { text: name, isBold: true }, ...gaugeOf(task, phase, tick)]
   }
 
   return [
@@ -199,4 +224,122 @@ export const rowsOf = (list: Checklist, tick: number, columns: number): Run[][] 
   const next = list.tasks.findIndex(task => task.status === 'upcoming')
 
   return list.tasks.map((task, i) => rowOf(task, `${cut(task.name, width).padEnd(width)}  `, list.phase, i === next, tick))
+}
+
+// Under this width a step's row has no room for its name beside the meter, as
+// in the dock's Checklist tab: there a step is a line of its own, and the step
+// at work has its meter on the line under it.
+const ONE_ROW = NARROWEST + BESIDE
+
+// What the job is doing, under its name in a narrow tab, and why it waits or
+// is stuck, in as many lines as that takes.
+const stateOf = (list: Checklist, now: number, columns: number, tick: number): Run[][] => {
+  const started = list.startedAt ?? now
+  const said = (text: string) => wrapped(text, columns).map((line): Run[] => [{ text: line }])
+
+  switch (list.phase) {
+    case 'idle':
+      return []
+    case 'working':
+      return [fitted([{ text: '▶ ', color: 'claude' }, { text: 'Working' }, { text: ` · ${durationOf(now - started)}`, isDim: true }], -1, columns)]
+    case 'needs-you':
+      return [[badgeOf(tick)], ...said(list.needsYouReason ?? '')]
+    case 'stuck':
+      return [[{ text: '⚠ Stuck', color: 'warning' }], ...said(list.stuckReason ?? '')]
+    case 'stopped':
+      return [fitted([{ text: '■ Stopped', color: 'error', isBold: true }, { text: ' · you pressed Esc', isDim: true }], -1, columns)]
+    case 'done':
+      return [
+        fitted(
+          [{ text: '✓ All done', color: 'success', isBold: true }, { text: ` · took ${durationOf((list.finishedAt ?? now) - started)}`, isDim: true }],
+          -1,
+          columns,
+        ),
+      ]
+  }
+}
+
+// The steps a line each, the one at work with its meter under it.
+const stackedOf = (list: Checklist, columns: number, tick: number): Run[][] => {
+  const room = Math.max(1, columns - 2)
+
+  return list.tasks.flatMap((task): Run[][] => {
+    const name = cut(task.name, room)
+
+    if (task.status === 'done') {
+      return [[{ text: '✓ ', color: 'success' }, { text: name, isDim: true }]]
+    }
+
+    if (task.status === 'active') {
+      return [
+        [markOf(list.phase), { text: name, isBold: true }],
+        [{ text: '  ' }, ...gaugeOf(task, list.phase, tick)],
+      ]
+    }
+
+    return [[{ text: '○ ', isDim: true }, { text: name, isDim: true }]]
+  })
+}
+
+// The Checklist tab of the dock. Narrow, as the dock is, it stacks: the job's
+// name, what it is doing, then the steps. Wide enough, it is the band's layout.
+// It keeps every step of a finished job: the band shrinks one to save its rows,
+// and the tab has rows to spare.
+export const paneLinesOf = (list: Checklist, now: number, columns: number, tick: number): Run[][] => {
+  if (list.phase === 'idle') {
+    return wrapped(NO_JOB, columns).map(line => [{ text: line, isDim: true }])
+  }
+
+  if (columns >= ONE_ROW) {
+    return [headerOf(list, now, columns, tick), ...rowsOf({ ...list, isCollapsed: false }, tick, columns)]
+  }
+
+  return [
+    ...wrapped(list.title, columns).map((line): Run[] => [{ text: line, isBold: true }]),
+    ...stateOf(list, now, columns, tick),
+    [{ text: ' ' }],
+    ...stackedOf(list, columns, tick),
+  ]
+}
+
+// What stands over the waterfall while a job runs, in two lines: the step it
+// is on, of how many, and then how far it is; or what holds or ended the job.
+export const stripOf = (list: Checklist, now: number, columns: number, tick: number): Run[][] => {
+  if (list.phase === 'idle') {
+    return []
+  }
+
+  const started = list.startedAt ?? now
+  const at = list.tasks.findIndex(task => task.status === 'active')
+  const task = list.tasks[at]
+  const done = list.tasks.filter(step => step.status === 'done').length
+  const count = list.tasks.length === 0 ? '' : `${at >= 0 ? at + 1 : done}/${list.tasks.length}`
+  const after = (text: string): Run[] => (count === '' ? [] : [{ text: `${text}${count}`, isDim: true }])
+  const under = (text: string): Run[] => [{ text: `  ${cut(text, columns - 2)}`, isDim: true }]
+
+  switch (list.phase) {
+    case 'working': {
+      const lead = count === '' ? [] : [{ text: `${count} `, isDim: true }]
+
+      return [
+        fitted([markOf(list.phase), ...lead, { text: task?.name ?? list.title, isBold: true }], 1 + lead.length, columns),
+        fitted(
+          [{ text: '  ' }, ...(task === undefined ? [...sweepOf(tick), { text: '  Working' }] : gaugeOf(task, list.phase, tick)), { text: ` · ${durationOf(now - started)}`, isDim: true }],
+          -1,
+          columns,
+        ),
+      ]
+    }
+    case 'needs-you':
+      return [fitted([badgeOf(tick), ...after(' ')], -1, columns), under(list.needsYouReason ?? '')]
+    case 'stuck':
+      return [fitted([{ text: '⚠ Stuck', color: 'warning' }, ...after(' · ')], -1, columns), under(list.stuckReason ?? '')]
+    case 'stopped':
+      return [fitted([{ text: '■ Stopped', color: 'error', isBold: true }, ...after(' · ')], -1, columns), under('you pressed Esc')]
+    case 'done':
+      return [
+        fitted([{ text: '✓ All done', color: 'success', isBold: true }, ...after(' · ')], -1, columns),
+        under(`took ${durationOf((list.finishedAt ?? now) - started)}`),
+      ]
+  }
 }

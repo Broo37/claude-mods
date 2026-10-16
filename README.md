@@ -4,7 +4,7 @@ Mods for [Claude Code](https://claude.com/claude-code): plugins of function hook
 
 | Mod | What it does | Yours to set |
 | --- | --- | --- |
-| [`clean-view`](#clean-view) | Hides tool calls, diffs and command output while Claude works, and shows the plan as a checklist above the prompt | `/simple on`, `/simple off` |
+| [`clean-view`](#clean-view) | Hides tool calls, diffs and command output while Claude works, and shows the plan as a checklist in a tab of the side pane | `/simple on`, `/simple off` |
 | `status-band` | The Awesome Statusline layout as a band above the prompt: model, git, context, 5H/7D limits and Codex 7D, with a pet under the list of sessions | `size`, `animate`, `position`, `pet` |
 | `transcript-makeover` | Ends every tool row with a check or a red cross and how long the call took, and every turn with a receipt: time, tools, failures, cost and share of the five-hour limit | |
 | `tool-waterfall` | A pane that charts the tool calls of the turn as bars along its time, like a browser's network tab | `/waterfall` opens and closes it |
@@ -33,12 +33,12 @@ claude --plugin-dir path/to/claude-mods/clean-view
 
 To load several from folders, list them in `CLAUDE_CODE_PLUGIN_DIRS` (under `env` in `settings.json`, `;` between them on Windows) in the order of the table. The first folder is the outermost hook, and the order matters:
 
-- `clean-view` comes first: it wraps the band `status-band` draws, and its hidden rows have to win over the badges of `transcript-makeover`.
+- `clean-view` comes first: it wraps the band `status-band` draws and the pane `tool-waterfall` draws, and its hidden rows have to win over the badges of `transcript-makeover`.
 - `status-band`, `transcript-makeover` and `tool-waterfall` come before `risky-hold`: a command it refuses never reaches a mod listed after it, so the mods that count and time calls would miss it.
 
 ## Clean View
 
-Makes a session calm to read. While Claude works, its tool calls, diffs and command output are hidden, and a checklist above the prompt shows the plan, the step it is on and how far along it is. Claude's written replies stay.
+Makes a session calm to read. While Claude works, its tool calls, diffs and command output are hidden, and a checklist in a tab of the side pane shows the plan, the step it is on and how far along it is. Claude's written replies stay.
 
 ```
 Build my landing page · 1m 12s                     [ ● Clean View: ON ]
@@ -53,8 +53,10 @@ The header follows the job: working, **Needs you** (Claude waits for your reply)
 ### Use
 
 - It starts on. `/simple off` turns it off, `/simple on` turns it on, `/simple` alone flips it. So does a click on the `[ ● Clean View: ON ]` button. The choice is remembered.
-- Off, every hidden row comes back and only the button stays.
-- Where another mod draws above the prompt too, the two share the space as tabs, `[ Checklist ]  Status`: click one to bring it forward.
+- Off, every hidden row comes back, the tab closes and only the button stays above the prompt. `/simple on` opens the tab again, in front.
+- In a fullscreen terminal the checklist is a tab of the side pane, beside `Waterfall` and `Sessions` where those mods are loaded: click a tab to bring it forward. The pane is narrow, so each step has a line of its own and the step at work its meter under it. The tab's title carries the job's state (`Checklist ▶`, `Checklist ✓`), so it reads from behind another tab.
+- Over the `tool-waterfall` chart it draws two lines of status: the step at work with its count (`▶ 2/4 Build the pricing section`), then its meter and the time.
+- Where the pane has no room for the tab, or you close it, the checklist goes back above the prompt. Where another mod draws there too, the two share the space as tabs, `[ Checklist ]  Status`.
 
 ### How it works
 
