@@ -29,6 +29,7 @@ const VIEW: View = {
   ],
   costUsd: 1.234,
   isBoardClosed: false,
+  isStatusClosed: false,
   mode: '',
   peers: [],
   startedAt: NOW - HOUR - 2 * MINUTE,
@@ -40,6 +41,10 @@ const VIEW: View = {
 const written = (segment: Segment) => {
   if ('bar' in segment) {
     return `[${segment.bar} ${segment.percent}/${segment.width}]`
+  }
+
+  if ('column' in segment) {
+    return `[${segment.column} ${segment.row}]`
   }
 
   return 'spin' in segment ? `[spin ${segment.spin}]` : segment.text

@@ -57,6 +57,9 @@ const reading = (percent: number, readAt: number, resetsAt = FRIDAY) =>
 
 const slashed = (path: string) => path.replace(/\\/g, '/')
 
+// Whether the dock places a pane: the Sessions pane always, the Status tab where the dock has room.
+const isPlacedIn = (world: { canDock: boolean }, id: string) => id !== 'status' || world.canDock
+
 // The stubs beneath the mod: they answer in Claude Code's place, from a world the test may change.
 const boot = (on: On, env: Record<string, string> = {}) => {
   const world = {
@@ -78,6 +81,8 @@ const boot = (on: On, env: Record<string, string> = {}) => {
     panes: [] as string[],
     // Whether the pane is a tab behind another pane of the dock.
     isBehind: false,
+    // Whether the dock has the room to place the Status tab: off, the band stands in for it.
+    canDock: false,
     commands: [] as string[],
     store: {} as Record<string, unknown>,
     runs: [] as { argv: readonly string[]; env?: Record<string, string> }[],
@@ -174,10 +179,18 @@ const boot = (on: On, env: Record<string, string> = {}) => {
     world.opened.push({ id: e.id, title: e.title, columns: e.columns })
     world.panes = [...new Set([...world.panes, e.id])]
 
-    return { value: { isPlaced: true as const } }
+    return {
+      value: isPlacedIn(world, e.id) ? { isPlaced: true as const } : { isPlaced: false as const, reason: 'the terminal is too narrow' },
+    }
   })
   on('ui.panes', () => ({
-    value: world.panes.map(id => ({ id, title: 'Sessions', isShown: !world.isBehind, isFocused: false, isPlaced: true })),
+    value: world.panes.map(id => ({
+      id,
+      title: id === 'status' ? 'Status' : 'Sessions',
+      isShown: !world.isBehind,
+      isFocused: false,
+      isPlaced: isPlacedIn(world, id),
+    })),
   }))
   on('ui.close', ($, e) => {
     world.closed.push(e.id)
@@ -1020,12 +1033,12 @@ test('opens the pane once another session is seen, wide enough for thirty column
   await start($, clock)
 
   // Alone, there is nothing to list and the chat keeps its whole width.
-  expect(world.opened).toEqual([])
+  expect(world.opened.filter(pane => pane.id === 'sessions')).toEqual([])
 
   world.files = { [`${TEAM_SESSIONS}/1.json`]: presence('s1', 'uat2-07', 'idle', NOW - MINUTE) }
   await clock.advance(POLL * 3)
 
-  expect(world.opened).toEqual([{ id: 'sessions', title: 'Sessions', columns: 32 }])
+  expect(world.opened.filter(pane => pane.id === 'sessions')).toEqual([{ id: 'sessions', title: 'Sessions', columns: 32 }])
 })
 
 test('leaves the pane closed once the person has closed it, until they ask for it', async ($, on) => {
@@ -1039,8 +1052,8 @@ test('leaves the pane closed once the person has closed it, until they ask for i
   world.files = { [`${TEAM_SESSIONS}/1.json`]: presence('s1', 'uat2-07', 'idle', NOW) }
   await clock.advance(POLL * 3)
 
-  expect(world.opened).toHaveLength(1)
-  expect(world.commands).toEqual(['sessions'])
+  expect(world.opened.filter(pane => pane.id === 'sessions')).toHaveLength(1)
+  expect(world.commands).toEqual(['sessions', 'band'])
 
   const ran = await $.command.run({
     command: 'sessions',
@@ -1050,7 +1063,7 @@ test('leaves the pane closed once the person has closed it, until they ask for i
   })
 
   expect(ran).toEqual({ text: 'Sessions pane opened.' })
-  expect(world.opened).toHaveLength(2)
+  expect(world.opened.filter(pane => pane.id === 'sessions')).toHaveLength(2)
 })
 
 test('brings the pane to the front when the person asks for it while it is a tab behind another pane', async ($, on) => {
@@ -1070,7 +1083,7 @@ test('brings the pane to the front when the person asks for it while it is a tab
   // The pane opened last is the tab in front: it is closed and opened again.
   expect(ran).toEqual({ text: 'Sessions pane opened.' })
   expect(world.closed).toEqual(['sessions'])
-  expect(world.opened).toHaveLength(2)
+  expect(world.opened.filter(pane => pane.id === 'sessions')).toHaveLength(2)
 })
 
 test('does not take the pane it is bringing to the front for one the person closed', async ($, on) => {
@@ -1088,8 +1101,8 @@ test('does not take the pane it is bringing to the front for one the person clos
   await clock.advance(POLL * 2)
 
   // It stays up, and stays asked for: nothing closes it again or opens it a third time.
-  expect(world.panes).toEqual(['sessions'])
-  expect(world.opened).toHaveLength(2)
+  expect(world.panes.filter(id => id === 'sessions')).toEqual(['sessions'])
+  expect(world.opened.filter(pane => pane.id === 'sessions')).toHaveLength(2)
 })
 
 test('leaves the pane as it is when the person asks for it while it is the one shown', async ($, on) => {
@@ -1589,3 +1602,238 @@ test(
     expect((await petIn($))?.raster.props?.cells).toBe(petFrame(CRAB, 'asleep', 0, AT_HOME).cells)
   },
 )
+
+// ── The Status tab ──────────────────────────────────────────────────────────
+
+const STATUS_TAB = {
+  ...BOARD,
+  requestId: 'status',
+  props: { ...BOARD.props, title: 'Status', bodyColumns: 32, scroll: { offset: 0, bodyRows: 40 } },
+} as const
+
+const BAND_CMD = {
+  command: 'band',
+  args: '',
+  origin: { kind: 'composer' },
+  presentation: { isFullscreen: true, columns: 150 },
+} as const
+
+// The lines of the Status tab, each slice of an upright bar written as its width.
+const tabOf = async ($: Engine) => {
+  const ui = await $.ui.mount({ ...STATUS_TAB, surface: 'terminal' })
+  const tree = (await ui.drawn()) as Drawn
+  await ui.unmount()
+
+  return { tree, lines: (tree.children ?? []).map(row => ((row as Drawn).children ?? []).map(written).join('')) }
+}
+
+const openedIds = (world: { opened: { id: string }[] }) => world.opened.map(pane => pane.id)
+
+test('opens a Status tab at the start of a session, 32 columns wide', async ($, on) => {
+  const { world, clock } = boot(on)
+  await start($, clock)
+
+  expect(world.opened).toEqual([{ id: 'status', title: 'Status', columns: 32 }])
+})
+
+test('opens the Status tab after the Sessions pane, so that it is the tab in front', async ($, on) => {
+  const { world, clock } = boot(on)
+  world.files = { [`${TEAM_SESSIONS}/1.json`]: presence('s1', 'uat2-07', 'idle', NOW - MINUTE) }
+  await start($, clock)
+
+  expect(openedIds(world)).toEqual(['sessions', 'status'])
+})
+
+test('opens no Status tab while the option is off', { options: { tab: false } }, async ($, on) => {
+  const { world, clock } = boot(on)
+  world.canDock = true
+  await start($, clock)
+
+  expect(openedIds(world)).toEqual([])
+  expect(await rowsOf($)).toHaveLength(7)
+})
+
+test('draws the status in its tab, two columns off its left edge', async ($, on) => {
+  const { clock } = boot(on)
+  await start($, clock)
+  const { tree, lines } = await tabOf($)
+
+  expect(lines.slice(0, 5)).toEqual([
+    '🤖 Opus 5.5 ⚡xhigh',
+    '🎨 Explanatory',
+    '📂 ~\\project',
+    '🌿 main · ✅ clean · 🐍 no env',
+    '💰 $ 1.23 · ⏰ 1h2m',
+  ])
+  expect(lines.filter(line => line === '[bar 5]   [bar 5]   [bar 5]   [bar 5]')).toHaveLength(11)
+  expect(lines.at(-1)).toBe('🧠 86k / 200k tokens')
+  expect(tree.props?.paddingLeft).toBe(2)
+})
+
+test('says the Status tab is loading before the first reading', async ($, on) => {
+  boot(on)
+
+  expect((await tabOf($)).lines).toEqual(['(loading..)'])
+})
+
+test('registers /band, and opens the Status tab again with it once the person closed it', async ($, on) => {
+  const { world, clock } = boot(on)
+  world.canDock = true
+  await start($, clock)
+
+  // The person closes it: Claude Code no longer lists it among the open panes.
+  world.panes = world.panes.filter(id => id !== 'status')
+  await clock.advance(POLL * 3)
+
+  expect(openedIds(world)).toEqual(['status'])
+  expect(world.commands).toContain('band')
+
+  expect(await $.command.run(BAND_CMD)).toEqual({ text: 'Status tab opened.' })
+  expect(openedIds(world)).toEqual(['status', 'status'])
+})
+
+test('says to widen the terminal when /band cannot place the Status tab', async ($, on) => {
+  const { clock } = boot(on)
+  await start($, clock)
+
+  expect(await $.command.run(BAND_CMD)).toEqual({ text: 'Status tab: widen the terminal to see it.' })
+})
+
+test('brings the Status tab to the front with /band when it is behind another pane', async ($, on) => {
+  const { world, clock } = boot(on)
+  world.canDock = true
+  await start($, clock)
+  world.isBehind = true
+
+  await $.command.run(BAND_CMD)
+
+  expect(world.closed).toEqual(['status'])
+  expect(openedIds(world)).toEqual(['status', 'status'])
+})
+
+// The bottom row of the 5H bar in the Status tab: the first bar of the last line that has bars.
+const bottomOf5H = async ($: Engine) => {
+  const ui = await $.ui.mount({ ...STATUS_TAB, surface: 'terminal' })
+  const tree = (await ui.drawn()) as Drawn
+  await ui.unmount()
+  const bars = (tree.children ?? [])
+    .map(row => ((row as Drawn).children ?? []).map(runsOf).find(runs => runs !== undefined))
+    .filter(runs => runs !== undefined)
+
+  return bars.at(-1)?.[0]
+}
+
+test('leaves the band to Claude Code while the Status tab is on screen', async ($, on) => {
+  const { world, clock } = boot(on)
+  world.canDock = true
+  await start($, clock)
+  await tabOf($)
+  const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
+
+  expect((await ui.find({ type: 'Text', text: 'engine' }))?.type).toBe('Text')
+  expect(await ui.find({ type: 'Text', text: /Context/ })).toBeUndefined()
+})
+
+test('leaves the line under the prompt to Claude Code while the Status tab is on screen', BELOW, async ($, on) => {
+  const { world, clock } = boot(on)
+  world.canDock = true
+  await start($, clock)
+  await tabOf($)
+  const ui = await $.ui.mount({ ...HINT, surface: 'terminal' })
+
+  expect((await ui.find({ type: 'Text', text: 'engine hint' }))?.type).toBe('Text')
+})
+
+test('keeps the band until the Status tab has been drawn in the dock', async ($, on) => {
+  const { world, clock } = boot(on)
+  world.canDock = true
+  await start($, clock)
+
+  expect(await rowsOf($)).toHaveLength(7)
+})
+
+const INLINE_TAB = { ...STATUS_TAB, props: { ...STATUS_TAB.props, placement: 'inline' } } as const
+
+test('closes the Status pane and keeps the band where the pane is seated inline above the prompt', async ($, on) => {
+  const { world, clock } = boot(on)
+  world.canDock = true
+  await start($, clock)
+  const ui = await $.ui.mount({ ...INLINE_TAB, surface: 'terminal' })
+  await ui.drawn()
+  await ui.unmount()
+  await clock.advance(POLL * 3)
+
+  expect(world.closed).toEqual(['status'])
+  expect(await rowsOf($)).toHaveLength(7)
+  // Not taken for the person's close, and not opened again into the same place.
+  expect(openedIds(world)).toEqual(['status'])
+})
+
+test('says what /band needs where the side pane cannot dock, and opens nothing', async ($, on) => {
+  const { world, clock } = boot(on)
+  await start($, clock)
+  const needs = { text: 'Status tab: the side pane needs a fullscreen terminal at least 110 columns wide.' }
+
+  expect(await $.command.run({ ...BAND_CMD, presentation: { isFullscreen: false, columns: 150 } })).toEqual(needs)
+  expect(await $.command.run({ ...BAND_CMD, presentation: { isFullscreen: true, columns: 100 } })).toEqual(needs)
+  expect(openedIds(world)).toEqual(['status'])
+})
+
+test('closes a Status tab left open once the option is turned off', { options: { tab: false } }, async ($, on) => {
+  const { world, clock } = boot(on)
+  world.canDock = true
+  // A reload keeps the panes: the tab opened before the option was turned off is still up.
+  world.panes = ['status']
+  await start($, clock)
+
+  expect(world.closed).toEqual(['status'])
+  expect(await rowsOf($)).toHaveLength(7)
+})
+
+test('says the Status tab is off when /band is asked for while the option is off', { options: { tab: false } }, async ($, on) => {
+  const { world, clock } = boot(on)
+  await start($, clock)
+
+  expect(await $.command.run(BAND_CMD)).toEqual({ text: 'Status tab is off: switch "Status tab" on in /config.' })
+  expect(openedIds(world)).toEqual([])
+})
+
+test('draws the band as before where the Status tab cannot be placed', async ($, on) => {
+  const { clock } = boot(on)
+  await start($, clock)
+
+  expect(await rowsOf($)).toHaveLength(7)
+})
+
+test('brings the band back for the session once the person closes the Status tab', async ($, on) => {
+  const { world, clock } = boot(on)
+  world.canDock = true
+  await start($, clock)
+  await tabOf($)
+  await clock.settle()
+  const band = await $.ui.mount({ ...BAND, surface: 'terminal' })
+
+  expect((await band.find({ type: 'Text', text: 'engine' }))?.type).toBe('Text')
+
+  await band.unmount()
+  const drawn = world.redraws
+  world.panes = world.panes.filter(id => id !== 'status')
+  await clock.advance(POLL)
+
+  expect(await rowsOf($)).toHaveLength(7)
+  expect(world.redraws).toBeGreaterThan(drawn)
+})
+
+test('sweeps a glint up the bars of the tab once a reading has changed, then rests', async ($, on) => {
+  const { world, clock } = boot(on)
+  world.canDock = true
+  await start($, clock)
+  const plain = await bottomOf5H($)
+  await clock.advance(SETTLE + FRAME)
+
+  expect((await bottomOf5H($))?.color).not.toBe(plain?.color)
+
+  await clock.advance(FRAME * 20)
+
+  expect(await bottomOf5H($)).toEqual(plain)
+})

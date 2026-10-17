@@ -1,10 +1,16 @@
 {
   "name": "status-band",
   "version": "0.1.0",
-  "description": "The Awesome Statusline layout as a band above the prompt: model, git, context, 5H/7D limits and Codex 7D",
   "author": { "name": "Broo37" },
+  "description": "The Awesome Statusline layout in a Status tab of the side pane, its bars upright, or as a band by the prompt: model, git, context, 5H/7D limits and Codex 7D",
   "types": "./types/index.d.ts",
   "userConfig": {
+    "tab": {
+      "type": "boolean",
+      "title": "Status tab",
+      "description": "Show the status in a tab of the side pane; the band only where that tab cannot show",
+      "default": true
+    },
     "size": {
       "type": "string",
       "title": "Size",

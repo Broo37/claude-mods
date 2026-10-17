@@ -3,8 +3,9 @@ import type { EngineInterface, FsEntry, Register, SessionUsage, Timer } from 'cl
 
 import type { Codex, Git, Limit, Peer, View } from '../types'
 
-import { barCells, barSpans, glintCells, rgb, spinnerCell } from './format'
-import type { BarSpan } from './format'
+import { boxHeight, columnRows } from './column'
+import { PALETTE, barCells, barSpans, glintCells, rgb, spinnerCell } from './format'
+import type { BarKind, BarSpan } from './format'
 import { boardOf, boardRows, hasBeat, hintRest, hintShift, isAtWork, linesOf, positionOf, sizeOf } from './layout'
 import type { Position, Segment, Size } from './layout'
 import {
@@ -20,6 +21,7 @@ import {
 } from './parse'
 import { HOPS_MS, PET_COLUMNS, PET_FRAME_MS, PET_HOME, PET_ROWS, isHot, petFrame, petOf } from './pet'
 import type { Creature, Mood } from './pet'
+import { tabLinesOf } from './tab'
 import { peerNews, warningsOf } from './warnings'
 
 type Rollout = { path: string; size: number; mtimeMs: number }
@@ -39,6 +41,7 @@ const EMPTY: View = {
   limits: [],
   costUsd: 0,
   isBoardClosed: false,
+  isStatusClosed: false,
   mode: '',
   peers: [],
   startedAt: 0,
@@ -47,7 +50,7 @@ const EMPTY: View = {
   turn: null,
 }
 
-const view = atom({ plugin: 'status-band', key: 'view' } as const, EMPTY, { shape: 'view-5' })
+const view = atom({ plugin: 'status-band', key: 'view' } as const, EMPTY, { shape: 'view-6' })
 
 const TICK = 30_000
 
@@ -96,6 +99,39 @@ const BOARD = { id: 'sessions', title: 'Sessions', columns: 30 + BOARD_GUTTER }
 
 // Whether this module has asked for that pane: once is enough, it stays up.
 let hasOpenedBoard = false
+
+// The tab the status is drawn in, beside the other sessions' pane and as wide.
+// While the dock places it, the band gives it the place it held by the prompt.
+const STATUS = { id: 'status', title: 'Status', columns: 30 + BOARD_GUTTER }
+
+// Whether the status goes in that tab at all, as the person chose in /config.
+let isTabOn = true
+
+// Whether this module has asked for that tab.
+let hasOpenedStatus = false
+
+// Whether the tab has been drawn in the dock since it was opened: the first time
+// it is, the band is drawn again, to give way to it.
+let isTabDrawn = false
+
+// Whether the pane was seated inline above the prompt, where no side pane is (a
+// terminal not in fullscreen): it is closed again and the band keeps its place.
+let isInline = false
+
+// The width of terminal from which the side pane docks a pane asked for, in fullscreen.
+const DOCK_COLUMNS = 110
+
+// Whether the Status tab is on screen in the dock, so the band leaves its place
+// to Claude Code: on, drawn in the dock, not closed by the person, and placed.
+async function isTabPlaced($: EngineInterface, shown: View) {
+  return (
+    isTabOn &&
+    isTabDrawn &&
+    !isInline &&
+    !shown.isStatusClosed &&
+    (await $.ui.panes()).some(pane => pane.id === STATUS.id && pane.isPlaced)
+  )
+}
 
 // How long one frame of the mark beside a session at work stands, the timer
 // that moves it on, and the frame it is at.
@@ -447,6 +483,38 @@ function spinMarks($: EngineInterface) {
   }
 }
 
+// Opens the Status tab, after the other sessions' pane so that it is the tab in
+// front, and notices when the person has closed it: a tab that was opened and
+// is no longer among the open panes. Then the band stands in for it, until the
+// person asks for the tab again. With the tab switched off in /config, a tab
+// still up from before (panes outlast a reload) is closed.
+async function watchStatus($: EngineInterface) {
+  if (!isTabOn) {
+    if ((await $.ui.panes()).some(pane => pane.id === STATUS.id)) {
+      hasOpenedStatus = false
+      await $.ui.close({ id: STATUS.id })
+    }
+
+    return
+  }
+
+  if (isInline) {
+    return
+  }
+
+  const shown = await read($, view)
+
+  if (hasOpenedStatus && !(await $.ui.panes()).some(pane => pane.id === STATUS.id)) {
+    hasOpenedStatus = false
+    isTabDrawn = false
+    await update($, view, last => ({ ...last, isStatusClosed: true }))
+    $.ui.invalidate('ui.render')
+  } else if (!hasOpenedStatus && !shown.isStatusClosed) {
+    hasOpenedStatus = true
+    void $.ui.open(STATUS)
+  }
+}
+
 // Looks at the other sessions, redraws the band when one of them has changed,
 // and tells the person when one now waits for them.
 async function watchPeers($: EngineInterface) {
@@ -487,6 +555,8 @@ async function watchPeers($: EngineInterface) {
       hasOpenedBoard = true
       void $.ui.open(BOARD)
     }
+
+    await watchStatus($)
 
     // While the pane is up, the mark beside a session at work spins, and the
     // icons of the sessions that move to the beat are drawn again on each one.
@@ -786,6 +856,7 @@ export const register: Register = (on, options) => {
   isAnimated = options.animate !== false
   position = positionOf(options.position)
   pet = petOf(options.pet)
+  isTabOn = options.tab !== false
   let tools = 0
 
   on('session.start', async ($, e, next) => {
@@ -793,6 +864,7 @@ export const register: Register = (on, options) => {
       name: 'sessions',
       description: 'Show the other Claude Code sessions on this machine in a pane',
     })
+    await $.command.register({ name: 'band', description: 'Show the status in a tab of the side pane' })
     $.clock.every(TICK, () => void refresh($))
     $.clock.every(PEERS_MS, () => void watchPeers($))
     $.clock.after(0, () => void refresh($))
@@ -827,6 +899,114 @@ export const register: Register = (on, options) => {
     const opened = await $.ui.open(BOARD)
 
     return { text: opened.isPlaced ? 'Sessions pane opened.' : 'Sessions pane: widen the terminal to see it.' }
+  })
+
+  // The Status tab, asked for: brought to the front as the Sessions pane is,
+  // and no longer taken for one the person closed.
+  on('command.run', { command: 'band' }, async ($, e) => {
+    if (!isTabOn) {
+      return { text: 'Status tab is off: switch "Status tab" on in /config.' }
+    }
+
+    // Asked for, a pane is placed at any width: outside a docking side pane it
+    // would stand inline above the prompt, where the band already shows it all.
+    if (!e.presentation.isFullscreen || e.presentation.columns < DOCK_COLUMNS) {
+      return { text: `Status tab: the side pane needs a fullscreen terminal at least ${DOCK_COLUMNS} columns wide.` }
+    }
+
+    isInline = false
+    await update($, view, last => ({ ...last, isStatusClosed: false }))
+
+    if ((await $.ui.panes()).some(pane => pane.id === STATUS.id && !pane.isShown)) {
+      hasOpenedStatus = false
+      await $.ui.close({ id: STATUS.id })
+    }
+
+    hasOpenedStatus = true
+    const opened = await $.ui.open(STATUS)
+    $.ui.invalidate('ui.render')
+
+    return { text: opened.isPlaced ? 'Status tab opened.' : 'Status tab: widen the terminal to see it.' }
+  })
+
+  // The Status tab: the band's text rows, the bars stood upright side by side,
+  // and when each limit resets, two columns off the pane's edge as the
+  // Sessions pane's lines are.
+  on('ui.render', { component: 'Pane', requestId: STATUS.id }, async ($, e) => {
+    const shown = await read($, view)
+    const { Box, Text } = $.ui.resolve(e)
+
+    // Seated inline above the prompt, it is no tab of the side pane: it is
+    // closed again, by the mod, and the band keeps its place.
+    if (e.props.placement !== 'dock') {
+      if (!isInline) {
+        isInline = true
+        hasOpenedStatus = false
+        isTabDrawn = false
+        $.clock.after(0, () => void $.ui.close({ id: STATUS.id }).then(() => $.ui.invalidate('ui.render')))
+      }
+
+      return <Box />
+    }
+
+    if (shown.now === 0) {
+      return (
+        <Box flexDirection="column" paddingLeft={BOARD_GUTTER}>
+          <Box>
+            <Text color={rgb(PALETTE.overlay)}>(loading..)</Text>
+          </Box>
+        </Box>
+      )
+    }
+
+    const lines = tabLinesOf(shown, e.props.bodyColumns - BOARD_GUTTER, e.props.scroll.bodyRows)
+    // Each bar's rows, worked out once and drawn a row a line, a glint passing
+    // up them while one sweeps.
+    const bars = new Map<BarKind, BarSpan[][]>()
+    const rowOf = (segment: Extract<Segment, { column: BarKind }>) => {
+      const { column: kind, percent, height, width, pace } = segment
+      const rows = bars.get(kind) ?? columnRows({ kind, percent, height, width, ...(pace !== undefined && { pace }) }, glint)
+      bars.set(kind, rows)
+
+      return rows[segment.row] ?? []
+    }
+    // A glint travels as far as the tallest box, counted in rows.
+    reach = Math.max(
+      0,
+      ...lines.flat().flatMap(segment => ('column' in segment ? [boxHeight(segment.percent, segment.height)] : [])),
+    )
+
+    // Drawn the first time, the tab takes the band's place: the band is drawn again to give way.
+    if (!isTabDrawn) {
+      isTabDrawn = true
+      $.clock.after(0, () => $.ui.invalidate('ui.render'))
+    }
+
+    return (
+      <Box flexDirection="column" paddingLeft={BOARD_GUTTER}>
+        {lines.map(line => (
+          <Box>
+            {line.flatMap(segment => {
+              if ('text' in segment) {
+                return [<Text {...textProps(segment)}>{segment.text}</Text>]
+              }
+
+              if (!('column' in segment)) {
+                return []
+              }
+
+              return [
+                <Box flexShrink={0}>
+                  {rowOf(segment).map(span => (
+                    <Text {...spanProps(span)}>{span.text}</Text>
+                  ))}
+                </Box>,
+              ]
+            })}
+          </Box>
+        ))}
+      </Box>
+    )
   })
 
   on('ui.render', { component: 'Pane', requestId: BOARD.id }, async ($, e) => {
@@ -954,7 +1134,8 @@ export const register: Register = (on, options) => {
     const shown = await read($, view)
 
     // A survey is drawn in a place of its own, so the band stays up beside it.
-    if (position === 'below' || shown.now === 0) {
+    // Where the Status tab is on screen, the status is there.
+    if (position === 'below' || shown.now === 0 || (await isTabPlaced($, shown))) {
       return next(e)
     }
 
@@ -978,7 +1159,7 @@ export const register: Register = (on, options) => {
   on('ui.render', { component: 'PromptHint' }, async ($, e, next) => {
     const shown = await read($, view)
 
-    if (position !== 'below' || shown.now === 0) {
+    if (position !== 'below' || shown.now === 0 || (await isTabPlaced($, shown))) {
       return next(e)
     }
 

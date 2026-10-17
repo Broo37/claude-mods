@@ -5,7 +5,7 @@ Mods for [Claude Code](https://claude.com/claude-code): plugins of function hook
 | Mod | What it does | Yours to set |
 | --- | --- | --- |
 | [`clean-view`](#clean-view) | Hides tool calls, diffs and command output while Claude works, and shows the plan as a checklist in a tab of the side pane | `/simple on`, `/simple off` |
-| `status-band` | The Awesome Statusline layout as a band above the prompt: model, git, context, 5H/7D limits and Codex 7D, with a pet under the list of sessions | `size`, `animate`, `position`, `pet` |
+| `status-band` | The Awesome Statusline layout in a Status tab of the side pane, its 5H, 7D, Codex and context bars standing upright side by side, with model, git, cost and reset times; a band by the prompt where the tab cannot show; a pet under the list of sessions | `tab`, `size`, `animate`, `position`, `pet`; `/band` brings the tab forward |
 | `transcript-makeover` | Ends every tool row with a check or a red cross and how long the call took, and every turn with a receipt: time, tools, failures, cost and share of the five-hour limit | |
 | `tool-waterfall` | A pane that charts the tool calls of the turn as bars along its time, like a browser's network tab | `/waterfall` opens and closes it |
 | `risky-hold` | Holds a destructive shell command (recursive delete, `git reset --hard`, force push, disk or database wipe) until you say run it | |

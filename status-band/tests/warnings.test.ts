@@ -25,6 +25,7 @@ const QUIET: View = {
   limits: [],
   costUsd: 0,
   isBoardClosed: false,
+  isStatusClosed: false,
   mode: '',
   peers: [],
   startedAt: NOW,

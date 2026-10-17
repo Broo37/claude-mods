@@ -33,6 +33,8 @@ export type View = {
   limits: Limit[]
   costUsd: number
   isBoardClosed: boolean
+  // Whether the person closed the Status tab: the band stands in for it until they ask again.
+  isStatusClosed: boolean
   mode: string
   peers: Peer[]
   startedAt: number

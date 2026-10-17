@@ -21,6 +21,8 @@ export type Segment =
   | { bar: BarKind; percent: number; width: number; pace?: number }
   // A mark that spins, one column wide, named after the session it stands beside.
   | { spin: string }
+  // One row of a bar stood upright: `row` 0 is its cap, then its body from the top.
+  | { column: BarKind; percent: number; height: number; width: number; row: number; pace?: number }
 
 const SIZES = ['xsmall', 'small', 'medium', 'large', 'xlarge'] as const
 
@@ -35,10 +37,10 @@ const WIDE = {
   xlarge: { width: 40, fiveHour: '5H Limit', sevenDay: '7D Limit', star: '🌟', resets: 'Resets in' },
 } as const
 
-const text = (value: string, color?: Rgb): Segment =>
+export const text = (value: string, color?: Rgb): Segment =>
   color === undefined ? { text: value } : { text: value, color }
 
-const bold = (value: string, color?: Rgb): Segment => ({ ...text(value, color), isBold: true })
+export const bold = (value: string, color?: Rgb): Segment => ({ ...text(value, color), isBold: true })
 
 const bar = (kind: BarKind, percent: number, width: number, pace?: number): Segment =>
   pace === undefined ? { bar: kind, percent, width } : { bar: kind, percent, width, pace }
@@ -66,7 +68,7 @@ const joined = (groups: Segment[][]) =>
 
 const isClean = (git: Git) => git.staged + git.unstaged + git.untracked === 0
 
-const readingsOf = (view: View) => {
+export const readingsOf = (view: View) => {
   const fiveHour = view.limits.find(limit => limit.kind === 'five_hour')
   const sevenDay = view.limits.find(limit => limit.kind === 'seven_day')
   // A reading from a window that has rolled over describes last week.
@@ -90,7 +92,7 @@ const readingsOf = (view: View) => {
   }
 }
 
-const modelOf = (view: View, isShort: boolean) => {
+export const modelOf = (view: View, isShort: boolean) => {
   const name = modelName(view.model)
 
   return [
@@ -117,7 +119,7 @@ const placeOf = (view: View, isShort: boolean) => [
   ...branchOf(view),
 ]
 
-const gitOf = ({ git }: View) => {
+export const gitOf = ({ git }: View) => {
   if (git === null) {
     return [text('🌿 '), text('no git', PALETTE.overlay)]
   }
@@ -133,16 +135,16 @@ const gitOf = ({ git }: View) => {
   return [text(`📝${staged}${unstaged}${untracked}`, PALETTE.latteYellow)]
 }
 
-const envOf = (view: View) => [
+export const envOf = (view: View) => [
   text('🐍 '),
   view.env === '' ? text('no env', PALETTE.overlay) : text(view.env, PALETTE.green),
 ]
 
 // The plan stands with the model and its effort, as one group: what the session runs on.
-const accountOf = (view: View) =>
+export const accountOf = (view: View) =>
   view.account === '' ? [] : [text(' 💎 '), text(view.account, PALETTE.lavender)]
 
-const styleOf = (view: View) =>
+export const styleOf = (view: View) =>
   view.style === '' ? [] : [text('🎨 '), text(view.style, PALETTE.peach)]
 
 // `frames` is what the icon shows beat after beat, in a round, where it may move.
@@ -234,15 +236,15 @@ export const boardOf = (
   return unnamed > 0 ? [...lines, BLANK, [text(`+${unnamed} more`, PALETTE.overlay)]] : lines
 }
 
-const costOf = (view: View) => [text('💰 '), text(cost(view.costUsd), PALETTE.yellow)]
+export const costOf = (view: View) => [text('💰 '), text(cost(view.costUsd), PALETTE.yellow)]
 
-const timeOf = (view: View) => [
+export const timeOf = (view: View) => [
   text('⏰ '),
   text(duration(view.now - view.startedAt), PALETTE.subtext),
 ]
 
 // The last turn as two groups: how long it took, and how many tools it called.
-const turnOf = ({ turn }: View) =>
+export const turnOf = ({ turn }: View) =>
   turn === null
     ? []
     : [

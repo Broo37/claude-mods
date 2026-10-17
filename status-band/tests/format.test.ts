@@ -10,6 +10,7 @@ import {
   modelName,
   remaining,
   remainingLong,
+  remainingShort,
   resetClock,
   resetDate,
   rgb,
@@ -69,6 +70,13 @@ test('writes the time left in a long window from its largest unit down', () => {
   expect(remainingLong(2 * HOUR + 15 * MINUTE)).toBe('2h15m')
   expect(remainingLong(45 * MINUTE)).toBe('45m')
   expect(remainingLong(-5000)).toBe('0m')
+})
+
+test('writes the time left in a few characters, its largest two units', () => {
+  expect(remainingShort(4 * DAY + 8 * HOUR + 45 * MINUTE)).toBe('4d8h')
+  expect(remainingShort(HOUR + 45 * MINUTE)).toBe('1h45m')
+  expect(remainingShort(7 * MINUTE)).toBe('7m')
+  expect(remainingShort(-MINUTE)).toBe('0m')
 })
 
 test('writes a reset time in local time', () => {

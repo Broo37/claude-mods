@@ -65,25 +65,25 @@ const CAP_END = '┤'
 
 // How bright the whisker reads, from 0 to 255, whatever the hue of its bar: at a
 // plain share of its color a navy line sinks into the terminal where an orange one stands.
-const WHISKER_LUMA = 80
+export const WHISKER_LUMA = 80
 
 // The pace on the whisker: a heavy stroke across the thin line, which runs on
 // through it, brighter than the line.
 const MARKER = '╂'
 
-const MARKER_LUMA = 150
+export const MARKER_LUMA = 150
 
 // The pace in the box: the same heavy stroke, cut into the block in a dark shade of it.
 const TICK = '┃'
 
-const TICK_SHADE = 0.3
+export const TICK_SHADE = 0.3
 
 const WHITE: Rgb = [255, 255, 255]
 
 const BLACK: Rgb = [0, 0, 0]
 
 // How much a filled block is lightened, by its distance from the glint's head.
-const GLINT = [0.6, 0.35, 0.15]
+export const GLINT = [0.6, 0.35, 0.15]
 
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 
@@ -143,7 +143,7 @@ export const barCells = (percent: number, width: number, kind: BarKind, pace?: n
   })
 }
 
-const lit = (color: Rgb, share: number) => mixed(color, WHITE, share)
+export const lit = (color: Rgb, share: number) => mixed(color, WHITE, share)
 
 // A bar with a glint passing over it: the filled blocks near `head` lightened.
 export const glintCells = (cells: BarCell[], head: number): BarCell[] =>
@@ -161,13 +161,13 @@ export const glintCells = (cells: BarCell[], head: number): BarCell[] =>
     }
   })
 
-const shaded = (color: Rgb, share: number) => mixed(BLACK, color, share)
+export const shaded = (color: Rgb, share: number) => mixed(BLACK, color, share)
 
 // How bright a color reads, from 0 to 255.
 const luma = ([r, g, b]: Rgb) => 0.299 * r + 0.587 * g + 0.114 * b
 
 // A color brought to a brightness, keeping its hue: darkened, or lightened toward white.
-const toned = (color: Rgb, target: number) => {
+export const toned = (color: Rgb, target: number) => {
   const now = luma(color)
 
   return now >= target
@@ -192,7 +192,7 @@ const spanOf = ({ isFilled, isMarked, color, rightColor }: BarCell, i: number, c
   return { text: glyph, color: toned(color, WHISKER_LUMA) }
 }
 
-const isSameInk = (a: Rgb | undefined, b: Rgb | undefined) =>
+export const isSameInk = (a: Rgb | undefined, b: Rgb | undefined) =>
   a === b || (a !== undefined && b !== undefined && a.every((part, i) => part === b[i]))
 
 // The bar as runs of text. A text draws the colors it names exactly, where a
@@ -260,6 +260,19 @@ export const remainingLong = (ms: number) => {
 
   if (days > 0) {
     return `${days}d${hours}h${minutes % 60}m`
+  }
+
+  return hours > 0 ? `${hours}h${minutes % 60}m` : `${minutes % 60}m`
+}
+
+// The time left in its largest two units, for a line as narrow as a tab of the dock.
+export const remainingShort = (ms: number) => {
+  const minutes = minutesIn(ms)
+  const days = Math.floor(minutes / 1440)
+  const hours = Math.floor((minutes % 1440) / 60)
+
+  if (days > 0) {
+    return `${days}d${hours}h`
   }
 
   return hours > 0 ? `${hours}h${minutes % 60}m` : `${minutes % 60}m`
