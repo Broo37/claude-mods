@@ -31,12 +31,16 @@ export const PLAN_TOOL = {
 export const PROGRESS_TOOL = {
   name: 'report_progress',
   description:
-    'Report real progress on the current step of the checklist the person watches. Name the step as it was planned, with or without its emoji, and give how far it is, 0 to 100. Call it with 100 the moment a step finishes: that checks it off and starts the next one.',
+    'Report real progress on the current step of the checklist the person watches. Name the step as it was planned, with or without its emoji, and give how far it is, 0 to 100. Call it with 100 the moment a step finishes: that checks it off and starts the next one. When a step finishes, add a note: one plain sentence on what you found or did in it, which the person reads when they open the step.',
   inputSchema: {
     type: 'object',
     properties: {
       task: { type: 'string', description: 'The name of the step, as planned.' },
       percent: { type: 'number', minimum: 0, maximum: 100, description: 'How far the step is, 0 to 100.' },
+      note: {
+        type: 'string',
+        description: 'One plain sentence on what you found or did in the step, under 160 characters, no code. Shown when the person opens the step.',
+      },
     },
     required: ['task', 'percent'],
   },
@@ -56,6 +60,7 @@ export const SECTION = {
     `- Put one emoji before each step name that shows what happens in it, from the set \`${PLAN_STEPS}\` lists, like "🧪 Run the tests".`,
     '- Never put file paths, file names, commands, code or tool names in a step name.',
     `- Call \`${REPORT_PROGRESS}\` as real progress happens, naming the step exactly as you planned it, and call it with 100 the moment a step finishes.`,
+    '- When a step finishes, give that report a `note`: one plain sentence on what you found or did in it. The person can open the step to read it, beside a plain list of what you did.',
     '- If this session has TodoWrite or TaskCreate, you can use your to-do list as the plan instead: its items become the checklist, so name them the same way.',
     '- Since your tool calls are hidden, say in your written reply what you did and what you found.',
   ].join('\n'),

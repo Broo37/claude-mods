@@ -1,9 +1,9 @@
 import { iconOf } from './icons'
-import type { CleanViewChecklist as Checklist, CleanViewTask as Task } from '../types'
+import type { CleanViewAction as Action, CleanViewChecklist as Checklist, CleanViewTask as Task } from '../types'
 
 // What the band shows of a checklist, as runs of text with a theme color, bold,
-// dim or inverse: the header's line and a row a step. Pure, so that it reads
-// the same on every surface.
+// dim or inverse: the header's line, a row a step, and under a step the person
+// opened, what Claude did in it. Pure, so that it reads the same on every surface.
 
 export type Run = { text: string; color?: string; isBold?: boolean; isDim?: boolean; isInverse?: boolean }
 
@@ -44,6 +44,14 @@ const BESIDE = 2 + ICON + 2 + METER + 2 + 7
 // Where a step's name starts in a stacked tab: after its mark and its emoji.
 const INDENT = 2 + ICON
 
+// A step's arrow in the band: open, closed, or the room of one where the step
+// has nothing to show.
+const ARROWS = { open: '▾ ', closed: '▸ ', none: '  ' } as const
+const ARROW = 2
+
+// Where what an opened step did starts: under its name, past its arrow, mark and emoji.
+const UNDER = ARROW + INDENT
+
 // The name column: as wide as the longest name needs, within these.
 const NARROWEST = 20
 const WIDEST = 40
@@ -51,6 +59,9 @@ const WIDEST = 40
 const SECOND = 1000
 const MINUTE = 60 * SECOND
 const HOUR = 60 * MINUTE
+
+// From this long an action is slow, and says how long it took.
+const SLOW = 3 * SECOND
 
 export const durationOf = (ms: number): string => {
   const whole = Math.max(0, ms)
@@ -233,7 +244,7 @@ const rowOf = (task: Task, name: string, phase: Checklist['phase'], isNext: bool
 }
 
 export const rowsOf = (list: Checklist, tick: number, columns: number): Run[][] => {
-  if (list.phase === 'idle' || list.isCollapsed) {
+  if (list.phase === 'idle') {
     return []
   }
 
@@ -242,6 +253,65 @@ export const rowsOf = (list: Checklist, tick: number, columns: number): Run[][] 
   const next = list.tasks.findIndex(task => task.status === 'upcoming')
 
   return list.tasks.map((task, i) => rowOf(task, `${cut(task.name, width).padEnd(width)}  `, list.phase, i === next, tick))
+}
+
+// A step of the band: its row, with the arrow that opens it, and, opened, what
+// Claude did in it.
+export type BandStep = { id: string; canOpen: boolean; isOpen: boolean; row: Run[]; details: Run[][] }
+
+// A step has something to show once Claude did something in it, or noted it.
+const hasShown = (task: Task) => task.note !== undefined || (task.actions?.length ?? 0) > 0
+
+// An action as a line: how it went, and why it failed or how long it took
+// where that is worth saying. What went well is dim; what failed is not.
+const actionLineOf = (action: Action, columns: number): Run[] => {
+  const under: Run = { text: ' '.repeat(UNDER) }
+
+  switch (action.status) {
+    case 'ok':
+      return fitted(
+        [
+          under,
+          { text: '✓ ', color: 'success' },
+          { text: action.text, isDim: true },
+          ...((action.ms ?? 0) >= SLOW ? [{ text: ` · ${durationOf(action.ms ?? 0)}`, isDim: true }] : []),
+        ],
+        2,
+        columns,
+      )
+    case 'failed':
+      return fitted(
+        [under, { text: '✗ ', color: 'error' }, { text: action.text }, { text: action.why === undefined ? ' · failed' : ` · failed: ${action.why}`, color: 'error' }],
+        2,
+        columns,
+      )
+    case 'running':
+      return fitted([under, { text: '◌ ', color: 'claude' }, { text: action.text }, { text: ' · running', isDim: true }], 2, columns)
+  }
+}
+
+// What an opened step shows: Claude's note on it, wrapped under itself, how
+// many older actions were let go, then the actions it keeps, oldest first.
+const detailsOf = (task: Task, columns: number): Run[][] => {
+  const under: Run = { text: ' '.repeat(UNDER) }
+  const note = task.note === undefined ? [] : wrapped(task.note, Math.max(1, columns - UNDER)).map(line => fitted([under, { text: line }], -1, columns))
+  const earlier = (task.earlier ?? 0) > 0 ? [fitted([under, { text: `… ${task.earlier} earlier`, isDim: true }], -1, columns)] : []
+
+  return [...note, ...earlier, ...(task.actions ?? []).map(action => actionLineOf(action, columns))]
+}
+
+// The steps as the band draws them: a row a step after the room of its arrow,
+// and under each step the person opened, what Claude did in it.
+export const bandStepsOf = (list: Checklist, opened: readonly string[], tick: number, columns: number): BandStep[] => {
+  const rows = rowsOf(list, tick, columns - ARROW)
+
+  return list.tasks.map((task, i) => {
+    const canOpen = hasShown(task)
+    const isOpen = canOpen && opened.includes(task.id)
+    const arrow: Run = canOpen ? { text: isOpen ? ARROWS.open : ARROWS.closed, color: 'claude' } : { text: ARROWS.none }
+
+    return { id: task.id, canOpen, isOpen, row: fitted([arrow, ...(rows[i] ?? [])], -1, columns), details: isOpen ? detailsOf(task, columns) : [] }
+  })
 }
 
 // Under this width a step's row has no room for its name beside the meter, as
@@ -297,17 +367,16 @@ const stackedOf = (list: Checklist, columns: number, tick: number): Run[][] => {
   })
 }
 
-// The Checklist tab of the dock. Narrow, as the dock is, it stacks: the job's
-// name, what it is doing, then the steps. Wide enough, it is the band's layout.
-// It keeps every step of a finished job: the band shrinks one to save its rows,
-// and the tab has rows to spare.
+// The Checklist tab of the dock, a plain list: no step opens there. Narrow, as
+// the dock is, it stacks: the job's name, what it is doing, then the steps.
+// Wide enough, it is the band's layout without the arrows.
 export const paneLinesOf = (list: Checklist, now: number, columns: number, tick: number): Run[][] => {
   if (list.phase === 'idle') {
     return wrapped(NO_JOB, columns).map(line => [{ text: line, isDim: true }])
   }
 
   if (columns >= ONE_ROW) {
-    return [headerOf(list, now, columns, tick), ...rowsOf({ ...list, isCollapsed: false }, tick, columns)]
+    return [headerOf(list, now, columns, tick), ...rowsOf(list, tick, columns)]
   }
 
   return [

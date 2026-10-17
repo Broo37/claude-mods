@@ -1,12 +1,14 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, On, Timer } from 'claude-code'
 
+import { actionOf, noteOf, whyOf } from './actions'
 import {
   IDLE,
   REASONS,
+  actionEnded,
+  actionStarted,
   addTask,
   changeTask,
-  collapse,
   endTurn,
   failTurn,
   fromTodos,
@@ -25,19 +27,20 @@ import {
 } from './checklist'
 import type { TaskChange, Todo } from './checklist'
 import { cleanName, cleanTitle } from './names'
-import { BUTTON, NO_JOB, TABS, TAB_MARKS, headerOf, paneLinesOf, rowsOf, stripOf } from './rows'
+import { BUTTON, NO_JOB, TABS, TAB_MARKS, bandStepsOf, headerOf, paneLinesOf, stripOf } from './rows'
 import type { Run } from './rows'
 import { NAMER, PLAN_FIRST, PLAN_STEPS, PLAN_TOOL, PROGRESS_TOOL, REPORT_PROGRESS, SECTION } from './words'
 import type { CleanViewChecklist as Checklist, CleanViewTab as Tab } from '../types'
 
 // Clean View: while it is on, the transcript keeps Claude's written replies and
 // loses its tool calls, and a checklist above the prompt says what the job is,
-// which step it is on and how far along.
+// which step it is on and how far along; a step opens there to what Claude did in it.
 
 const enabled = atom({ plugin: 'clean-view', key: 'cleanViewEnabled' } as const, true)
 const checklist = atom({ plugin: 'clean-view', key: 'checklist' } as const, IDLE)
 const tick = atom({ plugin: 'clean-view', key: 'tick' } as const, 0)
 const tab = atom({ plugin: 'clean-view', key: 'tab' } as const, 'checklist')
+const opened = atom({ plugin: 'clean-view', key: 'opened' } as const, [] as string[])
 
 // Under what names the setting and the tab in front are kept between sessions.
 const KEPT = 'enabled'
@@ -45,9 +48,6 @@ const FRONT = 'tab'
 
 // How often the frame counter advances while a job works or waits on the person.
 const FRAME_MS = 250
-
-// How long a finished job shows its steps before it shrinks to one line.
-const SHRINK_MS = 5000
 
 // How long the model that names a job may take.
 const NAMING_MS = 8000
@@ -64,7 +64,7 @@ const GAP = 1
 
 // The Checklist tab of the dock beside the transcript, as wide as its other
 // tabs (Sessions, Waterfall), whose lines stand two columns off its edge as
-// these do. Where the dock has it placed, the band leaves the checklist to it.
+// these do. It is the plain list; the band above the prompt keeps the checklist too.
 const GUTTER = 2
 const PANE = { id: 'checklist', title: TABS.checklist, columns: 30 + GUTTER }
 
@@ -76,8 +76,10 @@ const QUESTION = 'AskUserQuestion'
 // What Claude may call before a plan exists: the ways to make one, or to ask.
 const FREE = new Set(['ToolSearch', 'TodoWrite', 'TaskCreate', 'TaskUpdate', QUESTION])
 
-// How Claude Code words a tool's result when the person turned the call down.
+// How Claude Code words a tool's result when the person turned the call down,
+// and how an opened step says it.
 const TURNED_DOWN = /doesn.t want to (?:proceed|take this action)|tool use was rejected/i
+const SAID_NO = 'you said no'
 
 const ANSWERS = {
   noSteps: 'Give the steps as a list of 2 to 8 short names.',
@@ -91,13 +93,15 @@ const ANSWERS = {
 } as const
 
 let ticking: Timer | null = null
-let shrinking: Timer | null = null
 
 // The tool calls of the main conversation that failed in a row, those running
 // now, and whether the person was asked something while one ran.
 let failures = 0
 let running = 0
 let wasAsked = false
+
+// The calls seen, to name one that came without an id.
+let calls = 0
 
 // The title the Checklist tab was last given.
 let shownTitle: string | null = null
@@ -146,8 +150,8 @@ async function isAtWork($: EngineInterface) {
   return (await read($, enabled)) && (await isWatched($))
 }
 
-// The clock runs only while there is something to animate, and a finished job
-// shrinks once: no timer is left running while nothing happens.
+// The clock runs only while there is something to animate: no timer is left
+// running while nothing happens.
 function keepTime($: EngineInterface, list: Checklist) {
   if (list.phase === 'working' || list.phase === 'needs-you') {
     ticking ??= $.clock.every(FRAME_MS, () => {
@@ -157,16 +161,6 @@ function keepTime($: EngineInterface, list: Checklist) {
     ticking?.cancel()
     ticking = null
   }
-
-  if (list.phase === 'done' && !list.isCollapsed) {
-    shrinking ??= $.clock.after(SHRINK_MS, () => {
-      shrinking = null
-      change($, collapse).catch(() => {})
-    })
-  } else {
-    shrinking?.cancel()
-    shrinking = null
-  }
 }
 
 // The tab's title carries the job's state, to be read while another tab is in front.
@@ -175,19 +169,12 @@ const titleOf = (list: Checklist) => `${PANE.title}${TAB_MARKS[list.phase]}`
 async function openTab($: EngineInterface) {
   shownTitle = titleOf(await read($, checklist))
   await $.ui.open({ ...PANE, title: shownTitle })
-  // Placed, the tab takes the checklist over from the band.
-  $.ui.invalidate('ui.render')
 }
 
 async function closeTab($: EngineInterface) {
   if ((await $.ui.panes()).some(pane => pane.id === PANE.id)) {
     await $.ui.close({ id: PANE.id })
   }
-}
-
-// Whether the Checklist tab is open and drawn: the band then leaves the checklist to it.
-async function isDocked($: EngineInterface) {
-  return (await $.ui.panes()).some(pane => pane.id === PANE.id && pane.isPlaced)
 }
 
 // Gives the tab the title the job's state calls for. A tab the person closed
@@ -252,6 +239,8 @@ async function begin($: EngineInterface, text: string) {
   failures = 0
   running = 0
   wasAsked = false
+  // A new job starts with every step closed.
+  await update($, opened, () => [])
   await change($, () => startJob(earlier ?? cleanName(request), now))
   $.clock.after(0, () => {
     name($, now, request, earlier).catch(() => {})
@@ -272,21 +261,24 @@ async function plan($: EngineInterface, steps: unknown) {
   return { result: `Planned ${tasks.length} ${tasks.length === 1 ? 'step' : 'steps'}. The first one has started.` }
 }
 
-async function progress($: EngineInterface, task: unknown, percent: unknown) {
+async function progress($: EngineInterface, task: unknown, percent: unknown, note: unknown) {
   if (typeof task !== 'string' || task.trim() === '') {
     return { result: ANSWERS.noTask }
   }
 
   const now = await $.clock.now()
   failures = 0
-  await change($, list => toolSucceeded(reportProgress(list, task, Number(percent), now)))
+  await change($, list => toolSucceeded(reportProgress(list, task, Number(percent), now, noteOf(note))))
 
   return { result: `Progress noted: ${percentOf(Number(percent))}%.` }
 }
 
-async function failed($: EngineInterface, hasSaidNo: boolean) {
+// A tool call failed: `ended` notes how, under the step it was filed in.
+async function failed($: EngineInterface, hasSaidNo: boolean, ended: (list: Checklist) => Checklist) {
   failures += 1
-  await change($, list => {
+  await change($, before => {
+    const list = ended(before)
+
     if (hasSaidNo) {
       return stuck(list, REASONS.saidNo)
     }
@@ -316,6 +308,7 @@ async function setEnabled($: EngineInterface, isOn: boolean) {
     failures = 0
     running = 0
     wasAsked = false
+    await update($, opened, () => [])
     await change($, () => IDLE)
   }
 
@@ -335,6 +328,11 @@ async function pick($: EngineInterface, front: Tab) {
   } catch {
     // The tab is in front for this session all the same.
   }
+}
+
+// Opens a step of the band to what Claude did in it, or closes it again.
+async function flipStep($: EngineInterface, id: string) {
+  await update($, opened, ids => (ids.includes(id) ? ids.filter(other => other !== id) : [...ids, id]))
 }
 
 async function flip($: EngineInterface) {
@@ -384,14 +382,13 @@ export const registerCleanView = (on: On): void => {
     return next(e)
   })
 
-  // Closed by the person, the tab leaves the checklist to the band again: the
-  // band is drawn anew to take it up. Should that fail, the tab closes all the same.
+  // Closed by the person, the tab is retitled no more. Should that fail, the
+  // tab closes all the same.
   on('ui.close', async ($, e, next) => {
     const answer = await next(e)
 
     if (e.id === PANE.id) {
       shownTitle = null
-      $.ui.invalidate('ui.render')
     }
 
     return answer
@@ -458,7 +455,7 @@ export const registerCleanView = (on: On): void => {
     }
 
     if (e.tool === REPORT_PROGRESS) {
-      return progress($, call.task, call.percent)
+      return progress($, call.task, call.percent, call.note)
     }
 
     if (!FREE.has(e.tool) && !hasPlan(await read($, checklist))) {
@@ -468,17 +465,29 @@ export const registerCleanView = (on: On): void => {
     // A question put while another call runs is a guard's, about that call.
     wasAsked = running > 0 && e.tool === QUESTION
     running += 1
-    await change($, list => (e.tool === QUESTION ? needsYou(list, REASONS.question) : toolStarted(list)))
+    calls += 1
+    // What the call is in plain words, kept under the step at work; a call that
+    // only makes the plan is none.
+    const id = typeof call.tool_use_id === 'string' ? call.tool_use_id : `call-${calls}`
+    const action = actionOf(call)
+    const begun = await $.clock.now()
+    await change($, list => {
+      const moved = e.tool === QUESTION ? needsYou(list, REASONS.question) : toolStarted(list)
+
+      return action === null ? moved : actionStarted(moved, id, action, begun)
+    })
 
     try {
       const answer = await next(e)
+      const now = await $.clock.now()
 
       if (answer.deny !== undefined || answer.isError === true) {
-        await failed($, wasAsked || TURNED_DOWN.test(answer.text ?? ''))
+        const hasSaidNo = wasAsked || TURNED_DOWN.test(answer.text ?? '') || TURNED_DOWN.test(answer.deny ?? '')
+        const why = hasSaidNo ? SAID_NO : whyOf(answer.deny ?? answer.text ?? '')
+        await failed($, hasSaidNo, list => actionEnded(list, id, { isOk: false, why }, now))
       } else {
-        const now = await $.clock.now()
         failures = 0
-        await change($, list => toolSucceeded(followed(list, call, answer.result, now)))
+        await change($, list => toolSucceeded(actionEnded(followed(list, call, answer.result, now), id, { isOk: true }, now)))
       }
 
       return answer
@@ -557,26 +566,26 @@ export const registerCleanView = (on: On): void => {
     }
 
     const isOn = await read($, enabled)
-
-    // The checklist has its tab in the dock: the band is the other mods' alone.
-    if (isOn && (await isDocked($))) {
-      return next(e)
-    }
-
     const list = isOn ? await read($, checklist) : IDLE
     const frame = await read($, tick)
     const now = await $.clock.now()
     const label = isOn ? BUTTON.on : BUTTON.off
     const rest = await next(e)
     const { Box, Button, Text } = $.ui.resolve(e)
-    const lineOf = (runs: Run[]) => (
-      <Box>
-        {runs.map(run => (
-          <Text {...lookOf(run)}>{run.text}</Text>
-        ))}
-      </Box>
-    )
-    const rows = rowsOf(list, frame, e.props.bodyColumns).map(lineOf)
+    const textsOf = (runs: Run[]) => runs.map(run => <Text {...lookOf(run)}>{run.text}</Text>)
+    const lineOf = (runs: Run[]) => <Box>{textsOf(runs)}</Box>
+    // A step with something to show is a button: a press opens it to what
+    // Claude did in it, the next closes it.
+    const rows = bandStepsOf(list, await read($, opened), frame, e.props.bodyColumns).flatMap(step => [
+      step.canOpen ? (
+        <Button key={`open-${step.id}`} plain onPress={() => flipStep($, step.id)}>
+          {textsOf(step.row)}
+        </Button>
+      ) : (
+        lineOf(step.row)
+      ),
+      ...step.details.map(lineOf),
+    ])
     const toggle = <Button key="clean-view" label={label} onPress={() => flip($)} />
 
     // Alone in the band, or off, the mod draws one row of its own (the job and

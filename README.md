@@ -4,7 +4,7 @@ Mods for [Claude Code](https://claude.com/claude-code): plugins of function hook
 
 | Mod | What it does | Yours to set |
 | --- | --- | --- |
-| [`clean-view`](#clean-view) | Hides tool calls, diffs and command output while Claude works, and shows the plan as a checklist in a tab of the side pane | `/simple on`, `/simple off` |
+| [`clean-view`](#clean-view) | Hides tool calls, diffs and command output while Claude works, and shows the plan as a checklist above the prompt, where a click opens a step to what Claude did in it, and as a plain list in a tab of the side pane | `/simple on`, `/simple off` |
 | `status-band` | The Awesome Statusline layout in a Status tab of the side pane, its 5H, 7D, Codex and context bars standing upright side by side, with model, git, cost and reset times; a band by the prompt where the tab cannot show; a pet under the list of sessions | `tab`, `size`, `animate`, `position`, `pet`; `/band` brings the tab forward |
 | `transcript-makeover` | Ends every tool row with a check or a red cross and how long the call took, and every turn with a receipt: time, tools, failures, cost and share of the five-hour limit | |
 | `tool-waterfall` | A pane that charts the tool calls of the turn as bars along its time, like a browser's network tab | `/waterfall` opens and closes it |
@@ -38,29 +38,35 @@ To load several from folders, list them in `CLAUDE_CODE_PLUGIN_DIRS` (under `env
 
 ## Clean View
 
-Makes a session calm to read. While Claude works, its tool calls, diffs and command output are hidden, and a checklist in a tab of the side pane shows the plan, the step it is on and how far along it is. Claude's written replies stay.
+Makes a session calm to read. While Claude works, its tool calls, diffs and command output are hidden, and a checklist above the prompt shows the plan, the step it is on and how far along it is. Claude's written replies stay.
 
 ```
-Build my landing page · 1m 12s                     [ ● Clean View: ON ]
-✓ 📖 Read your brand notes            ██████████  Done
-▶ 🔨 Build the pricing section        ██████░░░░  60%
-○ 🔨 Add the contact form             ░░░░░░░░░░  Next
-○ 🎨 Polish the footer                ░░░░░░░░░░  Up next
+Build my landing page · 1m 12s                         [ ● Clean View: ON ]
+▸ ✓ 📖 Read your brand notes            ██████████  Done
+▾ ▶ 🔨 Build the pricing section        ██████░░░░  60%
+       Prices come from the menu file.
+       ✓ Read pricing.md
+       ✗ Ran: Run the tests · failed: missing script: test
+  ○ 🔨 Add the contact form             ░░░░░░░░░░  Next
+  ○ 🎨 Polish the footer                ░░░░░░░░░░  Up next
 ```
 
-The header follows the job: working, **Needs you** (Claude waits for your reply), **Stuck** (you said no to a step, a step keeps failing, or an API error ended the turn), **Stopped** (you pressed Esc) and **All done**, which shrinks to one line after five seconds.
+The header follows the job: working, **Needs you** (Claude waits for your reply), **Stuck** (you said no to a step, a step keeps failing, or an API error ended the turn), **Stopped** (you pressed Esc) and **All done**. A finished job keeps its steps on screen until your next prompt.
+
+A step with a `▸` opens at a click to what Claude did in it: its one-line note on the step, then its five latest actions in plain words, each with `✓` or `✗`, how long a slow one took and why a failed one failed. A second click closes it. Every new prompt starts with the steps closed.
 
 ### Use
 
 - It starts on. `/simple off` turns it off, `/simple on` turns it on, `/simple` alone flips it. So does a click on the `[ ● Clean View: ON ]` button. The choice is remembered.
 - Off, every hidden row comes back, the tab closes and only the button stays above the prompt. `/simple on` opens the tab again, in front.
-- In a fullscreen terminal the checklist is a tab of the side pane, beside `Waterfall` and `Sessions` where those mods are loaded: click a tab to bring it forward. The pane is narrow, so each step has a line of its own and the step at work its meter under it. The tab's title carries the job's state (`Checklist ▶`, `Checklist ✓`), so it reads from behind another tab.
+- In a fullscreen terminal the checklist is also a tab of the side pane, beside `Waterfall` and `Sessions` where those mods are loaded: a plain list, no step opens there. The pane is narrow, so each step has a line of its own and the step at work its meter under it. The tab's title carries the job's state (`Checklist ▶`, `Checklist ✓`), so it reads from behind another tab.
 - Over the `tool-waterfall` chart it draws two lines of status: the step at work with its count (`▶ 2/4 🔨 Build the pricing section`), then its meter and the time.
-- Where the pane has no room for the tab, or you close it, the checklist goes back above the prompt. Where another mod draws there too, the two share the space as tabs, `[ Checklist ]  Status`.
+- Where another mod draws above the prompt too, the two share the space as tabs, `[ Checklist ]  Status`.
 
 ### How it works
 
-- Claude gets two tools, `plan_steps` and `report_progress`, and a section of the system prompt that has it lay out 2 to 8 plain-English steps first and report as it goes. Until a plan exists every other tool is refused; a to-do list (TodoWrite, TaskCreate) counts as a plan.
+- Claude gets two tools, `plan_steps` and `report_progress`, and a section of the system prompt that has it lay out 2 to 8 plain-English steps first and report as it goes, with a one-line `note` on each step it finishes. Until a plan exists every other tool is refused; a to-do list (TodoWrite, TaskCreate) counts as a plan.
+- Every other tool call of the main conversation is filed under the step at work as it starts, in plain words (`Ran: <the description Claude gave>`, `Read index.html`, `Started a helper: …`), and marked when it ends. A helper's own calls are not.
 - Every step name passes through one cleaner: no code, paths or file names, 40 characters at most.
 - Each step starts with an emoji that says what happens in it. Claude picks it from a set of 22 (🔍 look into, 🔨 build, 🧪 test, 🚀 ship, …). A step that comes without one, such as a to-do item, gets one guessed from its verb. The set holds only emoji every terminal draws two columns wide, so the rows stay lined up.
 - Each prompt starts a job, named in 2 to 6 words by a small model in the background.
@@ -68,7 +74,7 @@ The header follows the job: working, **Needs you** (Claude waits for your reply)
 
 ### State other mods can read
 
-Declared in `clean-view/types/index.d.ts` under the plugin's name: `cleanViewEnabled`, `checklist` (title, phase, tasks with Claude's `icon`, reasons, times, `isCollapsed`), `tick` and `tab`.
+Declared in `clean-view/types/index.d.ts` under the plugin's name: `cleanViewEnabled`, `checklist` (title, phase, tasks with Claude's `icon`, `note` and `actions`, reasons, times), `tick`, `tab` and `opened` (the steps opened above the prompt).
 
 `cleanview.txt` is the prompt the mod was built from.
 

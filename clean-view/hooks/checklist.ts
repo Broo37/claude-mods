@@ -1,16 +1,18 @@
 import { pickedIcon } from './icons'
 import { cleanName } from './names'
-import type { CleanViewChecklist as Checklist, CleanViewTask as Task } from '../types'
+import type { CleanViewAction as Action, CleanViewChecklist as Checklist, CleanViewTask as Task } from '../types'
 
 // The rules of the checklist, as plain functions from one checklist to the
-// next: what a plan, a progress report, a to-do list, a question, a failure
-// and the end of a turn each make of it.
+// next: what a plan, a progress report, a to-do list, a question, a failure,
+// a tool call and the end of a turn each make of it.
 
 export type Todo = { content: string; status: 'pending' | 'in_progress' | 'completed' }
 
 export type TaskChange = { status?: 'pending' | 'in_progress' | 'completed' | 'deleted'; subject?: string }
 
 export type TurnEnd = { reason: 'answer' | 'aborted' | 'refusal' | 'error'; answer: string }
+
+export type ActionEnd = { isOk: boolean; why?: string }
 
 // Why the job waits on the person, or is stuck, each in one plain sentence.
 export const REASONS = {
@@ -24,6 +26,9 @@ export const REASONS = {
 
 // A plan's most steps.
 const STEPS = 8
+
+// The most actions a step keeps: the newest.
+const KEPT = 5
 
 // The title of a job nobody named.
 const UNTITLED = 'Working on it'
@@ -40,7 +45,6 @@ export const IDLE: Checklist = {
   stuckReason: null,
   startedAt: null,
   finishedAt: null,
-  isCollapsed: false,
 }
 
 // A step of a raw name: the emoji Claude started it with, where it is one of
@@ -59,6 +63,14 @@ const stepOf = (id: string, raw: string, status: Task['status'] = 'upcoming'): T
 }
 
 const done = (task: Task): Task => ({ ...task, status: 'done', percent: 100 })
+
+// What a step did: it stays with the step when the step is written again,
+// under its own name or a new one.
+const didOf = (task: Task) => ({
+  ...(task.note !== undefined && { note: task.note }),
+  ...(task.actions !== undefined && { actions: task.actions }),
+  ...(task.earlier !== undefined && { earlier: task.earlier }),
+})
 
 const isPlaceholder = (task: Task) => task.id.startsWith(PLACEHOLDER)
 
@@ -177,7 +189,8 @@ const afterCurrent = (tasks: readonly Task[]) => {
   return at
 }
 
-export const reportProgress = (list: Checklist, name: string, percent: number, now: number): Checklist => {
+// A note that comes with the report is the reported step's; none leaves the one it had.
+export const reportProgress = (list: Checklist, name: string, percent: number, now: number, note: string | null = null): Checklist => {
   const job = underway(list, now)
   const amount = percentOf(percent)
   const wanted = cleanName(pickedIcon(name).rest).toLowerCase()
@@ -197,7 +210,9 @@ export const reportProgress = (list: Checklist, name: string, percent: number, n
       }
 
       if (i === at) {
-        return amount === 100 ? done(task) : { ...task, status: 'active', percent: amount, hasReported: true }
+        const noted = note === null ? task : { ...task, note }
+
+        return amount === 100 ? done(noted) : { ...noted, status: 'active', percent: amount, hasReported: true }
       }
 
       // The step after one just finished starts; no other step is the current one.
@@ -223,12 +238,16 @@ export const fromTodos = (list: Checklist, todos: readonly Todo[], now: number):
     ...job,
     tasks: todos.map((todo, i) => {
       const step = stepOf(`todo-${i + 1}`, todo.content, STATUS[todo.status])
-      // What was reported for the step stands when the list is written again.
+      // What was reported for the step, and what it did, stand when the list is written again.
       const before = job.tasks.find(task => task.name === step.name)
 
-      return before === undefined || step.status === 'upcoming'
-        ? step
-        : { ...step, percent: step.status === 'done' ? 100 : before.percent, hasReported: before.hasReported }
+      if (before === undefined) {
+        return step
+      }
+
+      const kept = { ...step, ...didOf(before) }
+
+      return step.status === 'upcoming' ? kept : { ...kept, percent: step.status === 'done' ? 100 : before.percent, hasReported: before.hasReported }
     }),
   }
 }
@@ -261,7 +280,9 @@ export const changeTask = (list: Checklist, id: string, change: TaskChange): Che
 
       // A new name brings its own emoji, or none.
       const named =
-        change.subject === undefined ? task : { ...stepOf(task.id, change.subject), status: task.status, percent: task.percent, hasReported: task.hasReported }
+        change.subject === undefined
+          ? task
+          : { ...stepOf(task.id, change.subject), status: task.status, percent: task.percent, hasReported: task.hasReported, ...didOf(task) }
 
       return status === undefined ? named : status === 'done' ? done(named) : { ...named, status }
     }),
@@ -312,4 +333,52 @@ export const endTurn = (list: Checklist, end: TurnEnd, now: number): Checklist =
     : { ...list, phase: 'needs-you', needsYouReason: REASONS.reply, stuckReason: null, finishedAt: null }
 }
 
-export const collapse = (list: Checklist): Checklist => (list.phase === 'done' ? { ...list, isCollapsed: true } : list)
+// A tool call starts: it is filed under the step at work, or, with none at
+// work, the last step started. Where there is no step, it is not kept.
+export const actionStarted = (list: Checklist, id: string, text: string, now: number): Checklist => {
+  const active = list.tasks.findIndex(task => task.status === 'active')
+  const at = active >= 0 ? active : afterCurrent(list.tasks) - 1
+
+  if (at < 0) {
+    return list
+  }
+
+  return {
+    ...list,
+    tasks: list.tasks.map((task, i) => {
+      if (i !== at) {
+        return task
+      }
+
+      const all: Action[] = [...(task.actions ?? []), { id, text, status: 'running', startedAt: now }]
+      const gone = Math.max(0, all.length - KEPT)
+      const earlier = (task.earlier ?? 0) + gone
+
+      return { ...task, actions: all.slice(gone), ...(earlier > 0 && { earlier }) }
+    }),
+  }
+}
+
+// A tool call ends, under the step it started in: how it went, how long it
+// took, and why it failed where it did.
+export const actionEnded = (list: Checklist, id: string, end: ActionEnd, now: number): Checklist => {
+  const at = list.tasks.findIndex(task => task.actions?.some(action => action.id === id) === true)
+
+  if (at < 0) {
+    return list
+  }
+
+  const ended = (action: Action): Action => ({
+    ...action,
+    status: end.isOk ? 'ok' : 'failed',
+    ms: Math.max(0, now - action.startedAt),
+    ...(!end.isOk && end.why !== undefined && end.why !== '' && { why: end.why }),
+  })
+
+  return {
+    ...list,
+    tasks: list.tasks.map((task, i) =>
+      i === at ? { ...task, actions: (task.actions ?? []).map(action => (action.id === id ? ended(action) : action)) } : task,
+    ),
+  }
+}

@@ -1,7 +1,7 @@
 import { expect, test } from 'claude-code/testing'
 
-import { IDLE, REASONS, collapse, endTurn, needsYou, planSteps, reportProgress, startJob, stuck } from '../hooks/checklist'
-import { BUTTON, durationOf, headerOf, paneLinesOf, rowsOf, stripOf } from '../hooks/rows'
+import { IDLE, REASONS, actionEnded, actionStarted, endTurn, needsYou, planSteps, reportProgress, startJob, stuck } from '../hooks/checklist'
+import { BUTTON, bandStepsOf, durationOf, headerOf, paneLinesOf, rowsOf, stripOf } from '../hooks/rows'
 import type { Run } from '../hooks/rows'
 import type { CleanViewChecklist } from '../types'
 
@@ -145,8 +145,7 @@ test('pulses the Needs you badge slowly, a second lit and a second plain', () =>
   expect(badgeAt(8)?.isInverse).toBe(true)
 })
 
-test('draws no rows for a job that shrank to one line, or while no job has run', () => {
-  expect(linesOf(collapse(finished()))).toEqual([])
+test('draws every step of a finished job, and no rows while no job has run', () => {
   expect(linesOf(finished())).toHaveLength(4)
   expect(linesOf(IDLE)).toEqual([])
 })
@@ -227,8 +226,8 @@ test('says in a narrow tab how a job ended', () => {
   expect(paneOf(stuck(planned(), REASONS.saidNo)).slice(1, 3)).toEqual(['⚠ Stuck', 'you said no to a step, so'])
 })
 
-test('keeps every step of a finished job in the tab, where the band shrinks it to one line', () => {
-  expect(paneOf(collapse(finished()), NOW + 200_000)).toHaveLength(7)
+test('keeps every step of a finished job in the tab', () => {
+  expect(paneOf(finished(), NOW + 200_000)).toHaveLength(7)
 })
 
 test('draws the checklist one row a step where the tab is wide enough for it', () => {
@@ -285,4 +284,112 @@ test('never cuts an emoji in half, however narrow the room', () => {
       expect(line).not.toMatch(HALF)
     }
   }
+})
+
+// ── The band's steps, each one opened to what Claude did in it ──────────────
+
+// The step at work read a file, then ran the tests, which failed after four seconds.
+const busy = () => {
+  const read = actionEnded(actionStarted(halfway(), 'c1', 'Read pricing.md', NOW), 'c1', { isOk: true }, NOW + 200)
+
+  return actionEnded(actionStarted(read, 'c2', 'Ran: Run the tests', NOW + 300), 'c2', { isOk: false, why: 'missing script: test' }, NOW + 4500)
+}
+
+const bandLinesOf = (list: CleanViewChecklist, opened: readonly string[] = [], columns = 120, tick = 0) =>
+  bandStepsOf(list, opened, tick, columns).flatMap(step => [textOf(step.row), ...step.details.map(textOf)])
+
+// The rows of the steps in the band, each after the room its arrow takes.
+const BAND_ROWS = [
+  `  ${'✓ 📖 Read your brand notes'.padEnd(32)}██████████  Done`,
+  `▸ ${'▶ 🔨 Build the pricing section'.padEnd(32)}██████░░░░  60%`,
+  `  ${'○ 🔨 Add the contact form'.padEnd(32)}░░░░░░░░░░  Next`,
+  `  ${'○ 🎨 Polish the footer'.padEnd(32)}░░░░░░░░░░  Up next`,
+]
+
+// Where what a step did starts: under its name, past its arrow, mark and emoji.
+const UNDER = ' '.repeat(7)
+
+test('puts an arrow before a step with something to show, and keeps the room for one before the rest', () => {
+  const steps = bandStepsOf(busy(), [], 0, 120)
+
+  expect(bandLinesOf(busy())).toEqual(BAND_ROWS)
+  expect(steps.map(step => step.id)).toEqual(['step-1', 'step-2', 'step-3', 'step-4'])
+  expect(steps.map(step => step.canOpen)).toEqual([false, true, false, false])
+  expect(steps.every(step => !step.isOpen && step.details.length === 0)).toBe(true)
+})
+
+test('opens a step to how each thing Claude did in it went, and why one failed', () => {
+  expect(bandLinesOf(busy(), ['step-2'])).toEqual([
+    BAND_ROWS[0],
+    `▾ ${'▶ 🔨 Build the pricing section'.padEnd(32)}██████░░░░  60%`,
+    `${UNDER}✓ Read pricing.md`,
+    `${UNDER}✗ Ran: Run the tests · failed: missing script: test`,
+    BAND_ROWS[2],
+    BAND_ROWS[3],
+  ])
+})
+
+test('marks what went well in green and dims it, and what failed in red', () => {
+  const opened = bandStepsOf(busy(), ['step-2'], 0, 120)[1]
+
+  expect(opened?.details[0]?.[1]).toEqual({ text: '✓ ', color: 'success' })
+  expect(opened?.details[0]?.[2]).toMatchObject({ text: 'Read pricing.md', isDim: true })
+  expect(opened?.details[1]?.[1]).toEqual({ text: '✗ ', color: 'error' })
+  expect(opened?.details[1]?.at(-1)).toMatchObject({ text: ' · failed: missing script: test', color: 'error' })
+})
+
+test("leads an opened step with Claude's note on it", () => {
+  const noted = reportProgress(busy(), 'Build the pricing section', 80, NOW, 'Prices come from the menu file.')
+
+  expect(bandLinesOf(noted, ['step-2']).slice(2, 4)).toEqual([`${UNDER}Prices come from the menu file.`, `${UNDER}✓ Read pricing.md`])
+  // A note alone is something to show.
+  expect(bandStepsOf(reportProgress(planned(), 'Read your brand notes', 100, NOW, 'Warm and friendly.'), [], 0, 120)[0]?.canOpen).toBe(true)
+})
+
+test('says how long a slow action took, and that one still runs', () => {
+  const slow = actionEnded(actionStarted(halfway(), 'c1', 'Ran: Build the site', NOW), 'c1', { isOk: true }, NOW + 12_400)
+  const running = actionStarted(slow, 'c2', 'Read pricing.md', NOW + 13_000)
+
+  expect(bandLinesOf(running, ['step-2']).slice(2, 4)).toEqual([`${UNDER}✓ Ran: Build the site · 12s`, `${UNDER}◌ Read pricing.md · running`])
+})
+
+test('counts the actions let go before the five it shows', () => {
+  let job = halfway()
+
+  for (let i = 1; i <= 7; i += 1) {
+    job = actionEnded(actionStarted(job, `c${i}`, `Read file${i}.ts`, NOW), `c${i}`, { isOk: true }, NOW)
+  }
+
+  expect(bandLinesOf(job, ['step-2']).slice(2, 4)).toEqual([`${UNDER}… 2 earlier`, `${UNDER}✓ Read file3.ts`])
+})
+
+test('opens a finished step as well, and nothing for a step with nothing to show', () => {
+  const done = reportProgress(busy(), 'Build the pricing section', 100, NOW)
+
+  expect(bandLinesOf(done, ['step-2', 'step-3'])).toHaveLength(6)
+  expect(bandLinesOf(done, ['step-2'])[1]?.startsWith('▾ ✓ 🔨 Build the pricing section')).toBe(true)
+  expect(bandStepsOf(done, ['step-3'], 0, 120)[2]).toMatchObject({ canOpen: false, isOpen: false, details: [] })
+})
+
+test('wraps a long note under itself, and keeps every line of an opened step within the room', () => {
+  const noted = reportProgress(busy(), 'Build the pricing section', 80, NOW, 'Prices come from the menu file, which the shop updates every Monday morning.')
+
+  for (const columns of [34, 50, 80]) {
+    expect(bandLinesOf(noted, ['step-2'], columns).every(line => line.length <= columns)).toBe(true)
+  }
+
+  expect(bandLinesOf(noted, ['step-2'], 50).slice(2, 4)).toEqual([`${UNDER}Prices come from the menu file, which the`, `${UNDER}shop updates every Monday morning.`])
+})
+
+test('never cuts an emoji in half in the band, however narrow the room', () => {
+  for (let columns = 1; columns <= 14; columns += 1) {
+    for (const line of bandLinesOf(busy(), ['step-2'], columns)) {
+      expect(line).not.toMatch(HALF)
+    }
+  }
+})
+
+test('keeps the tab a plain list: no arrows and nothing of what a step did', () => {
+  expect(paneOf(busy())).toEqual(paneOf(halfway()))
+  expect(paneLinesOf(busy(), NOW, 60, 0).map(textOf)).toEqual(paneLinesOf(halfway(), NOW, 60, 0).map(textOf))
 })

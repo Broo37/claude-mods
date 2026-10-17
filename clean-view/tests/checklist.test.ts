@@ -4,8 +4,9 @@ import {
   IDLE,
   REASONS,
   addTask,
+  actionEnded,
+  actionStarted,
   changeTask,
-  collapse,
   endTurn,
   errorSentence,
   failTurn,
@@ -42,7 +43,7 @@ const ANSWERED = { reason: 'answer', answer: 'Here you go.' } as const
 test('starts a job working, with two placeholder steps until the plan arrives', () => {
   const job = startJob('Build my landing page', NOW)
 
-  expect(job).toMatchObject({ title: 'Build my landing page', phase: 'working', startedAt: NOW, finishedAt: null, isCollapsed: false })
+  expect(job).toMatchObject({ title: 'Build my landing page', phase: 'working', startedAt: NOW, finishedAt: null })
   expect(steps(job)).toEqual(['Understand your request:active:0', 'Plan the steps:upcoming:0'])
   expect(isUnderway(job)).toBe(true)
   expect(isUnderway(IDLE)).toBe(false)
@@ -252,7 +253,7 @@ test('is stuck with a reason until a tool succeeds', () => {
 test('is all done when the turn ends with every step checked off', () => {
   const job = endTurn(reportProgress(planned(), 'Polish the footer', 100, NOW), ANSWERED, NOW + 134_000)
 
-  expect(job).toMatchObject({ phase: 'done', finishedAt: NOW + 134_000, isCollapsed: false })
+  expect(job).toMatchObject({ phase: 'done', finishedAt: NOW + 134_000 })
   expect(isUnderway(job)).toBe(false)
 })
 
@@ -327,13 +328,6 @@ test('leaves a checklist alone when a turn ends that was no job', () => {
   expect(endTurn(finished, { reason: 'aborted', answer: '' }, NOW + 5000)).toEqual(finished)
 })
 
-test('shrinks only a job that is all done', () => {
-  const finished = endTurn(reportProgress(planned(), 'Polish the footer', 100, NOW), ANSWERED, NOW + 1000)
-
-  expect(collapse(finished).isCollapsed).toBe(true)
-  expect(collapse(planned()).isCollapsed).toBe(false)
-})
-
 test('gives a job a new title and nothing else', () => {
   expect(rename(planned(), 'Build bakery landing page')).toEqual({ ...planned(), title: 'Build bakery landing page' })
 })
@@ -380,4 +374,89 @@ test('lets no API error speak over a job that was not ended by one', () => {
   expect(failTurn(finished, sentence, NOW + 2000)).toEqual(finished)
   expect(failTurn(refused, sentence, NOW + 2000)).toEqual(refused)
   expect(failTurn(turnedDown, sentence, NOW + 2000)).toEqual(turnedDown)
+})
+
+// ── What Claude does in a step ──────────────────────────────────────────────
+
+// A step's actions as "text:status", to read them at a glance.
+const actionsOf = (list: CleanViewChecklist, i: number) => (list.tasks[i]?.actions ?? []).map(action => `${action.text}:${action.status}`)
+
+test('keeps what Claude does under the step at work, running until it ends', () => {
+  const job = actionStarted(planned(), 'c1', 'Read index.html', NOW)
+
+  expect(actionsOf(job, 0)).toEqual(['Read index.html:running'])
+  expect(job.tasks[0]?.actions?.[0]).toMatchObject({ id: 'c1', startedAt: NOW })
+  expect(actionsOf(job, 1)).toEqual([])
+})
+
+test('says how an action went and how long it took once it ends', () => {
+  const started = actionStarted(actionStarted(planned(), 'c1', 'Read index.html', NOW), 'c2', 'Ran: Run the tests', NOW)
+  const ended = actionEnded(actionEnded(started, 'c1', { isOk: true }, NOW + 300), 'c2', { isOk: false, why: 'missing script: test' }, NOW + 4200)
+
+  expect(ended.tasks[0]?.actions).toEqual([
+    { id: 'c1', text: 'Read index.html', status: 'ok', startedAt: NOW, ms: 300 },
+    { id: 'c2', text: 'Ran: Run the tests', status: 'failed', startedAt: NOW, ms: 4200, why: 'missing script: test' },
+  ])
+})
+
+test('keeps an action under the step it started in, though another step is at work when it ends', () => {
+  const started = actionStarted(planned(), 'c1', 'Ran: Run the tests', NOW)
+  const moved = reportProgress(started, 'Read your brand notes', 100, NOW + 100)
+  const ended = actionEnded(moved, 'c1', { isOk: true }, NOW + 200)
+
+  expect(actionsOf(ended, 0)).toEqual(['Ran: Run the tests:ok'])
+  expect(actionsOf(ended, 1)).toEqual([])
+})
+
+test('keeps the five newest actions of a step and counts the ones let go', () => {
+  let job = planned()
+
+  for (let i = 1; i <= 8; i += 1) {
+    job = actionStarted(job, `c${i}`, `Read file${i}.ts`, NOW)
+  }
+
+  expect(actionsOf(job, 0)).toEqual(['Read file4.ts:running', 'Read file5.ts:running', 'Read file6.ts:running', 'Read file7.ts:running', 'Read file8.ts:running'])
+  expect(job.tasks[0]?.earlier).toBe(3)
+})
+
+test('files an action under the last step started when no step is at work', () => {
+  const checkedOff = reportProgress(planned(), 'Polish the footer', 100, NOW)
+
+  expect(actionsOf(actionStarted(checkedOff, 'c1', 'Ran: Check the site', NOW), 3)).toEqual(['Ran: Check the site:running'])
+})
+
+test('keeps no action where there is no step to file it under', () => {
+  expect(actionStarted(IDLE, 'c1', 'Read index.html', NOW)).toEqual(IDLE)
+})
+
+test('leaves the checklist as it is when an action it does not keep ends', () => {
+  const job = planned()
+
+  expect(actionEnded(job, 'c9', { isOk: true }, NOW)).toBe(job)
+})
+
+test('keeps the note Claude gives with a report on the step it reports', () => {
+  const job = reportProgress(planned(), 'Read your brand notes', 100, NOW, 'The brand is warm and friendly.')
+
+  expect(job.tasks[0]?.note).toBe('The brand is warm and friendly.')
+  expect(job.tasks[1]?.note).toBeUndefined()
+  // A report with no note leaves the one before it.
+  expect(reportProgress(job, 'Read your brand notes', 100, NOW).tasks[0]?.note).toBe('The brand is warm and friendly.')
+  // A step the report adds to the plan takes its note too.
+  expect(reportProgress(planned(), 'Check the links', 50, NOW, 'Two links were broken.').tasks[1]).toMatchObject({ name: 'Check the links', note: 'Two links were broken.' })
+})
+
+test('keeps what a step did when the to-do list is written again, or the task renamed', () => {
+  const todos = [
+    { content: 'Read your brand notes', status: 'in_progress' },
+    { content: 'Polish the footer', status: 'pending' },
+  ] as const
+  const job = actionStarted(fromTodos(startJob('Ship it', NOW), [...todos], NOW), 'c1', 'Read brand.md', NOW)
+  const again = fromTodos(job, [{ ...todos[0], status: 'completed' }, todos[1]], NOW)
+
+  expect(actionsOf(again, 0)).toEqual(['Read brand.md:running'])
+
+  const tasked = actionStarted(changeTask(addTask(startJob('Ship it', NOW), '1', 'Read the notes', NOW), '1', { status: 'in_progress' }), 'c1', 'Read brand.md', NOW)
+
+  expect(actionsOf(changeTask(tasked, '1', { subject: 'Read the brand notes' }), 0)).toEqual(['Read brand.md:running'])
 })

@@ -205,7 +205,10 @@ const textOf = (node: unknown): string => {
   }
 
   if (node.type === 'Button') {
-    return node.props?.plain === true ? `‹${String(node.props.label)}›` : `⟦${String(node.props?.label)}⟧`
+    // A Button of children (a step of the checklist) shows them for its label.
+    const label = node.props?.label === undefined ? (node.children ?? []).map(textOf).join('') : String(node.props.label)
+
+    return node.props?.plain === true ? `‹${label}›` : `⟦${label}⟧`
   }
 
   return (node.children ?? []).map(textOf).join('')
@@ -251,12 +254,12 @@ const rowOf = async ($: Engine, component: 'ToolUse' | 'ToolResult' | 'ToolGroup
 
 const ROWS = {
   planned: [
-    `${'▶ 📖 Read your brand notes'.padEnd(32)}███░░░░░░░  Working`,
-    `${'○ 🔨 Build the pricing section'.padEnd(32)}░░░░░░░░░░  Next`,
-    `${'○ 🔨 Add the contact form'.padEnd(32)}░░░░░░░░░░  Up next`,
-    `${'○ 🎨 Polish the footer'.padEnd(32)}░░░░░░░░░░  Up next`,
+    `  ${'▶ 📖 Read your brand notes'.padEnd(32)}███░░░░░░░  Working`,
+    `  ${'○ 🔨 Build the pricing section'.padEnd(32)}░░░░░░░░░░  Next`,
+    `  ${'○ 🔨 Add the contact form'.padEnd(32)}░░░░░░░░░░  Up next`,
+    `  ${'○ 🎨 Polish the footer'.padEnd(32)}░░░░░░░░░░  Up next`,
   ],
-  placeholders: [`${'▶ 🤔 Understand your request'.padEnd(30)}███░░░░░░░  Working`, `${'○ 📋 Plan the steps'.padEnd(30)}░░░░░░░░░░  Next`],
+  placeholders: [`  ${'▶ 🤔 Understand your request'.padEnd(30)}███░░░░░░░  Working`, `  ${'○ 📋 Plan the steps'.padEnd(30)}░░░░░░░░░░  Next`],
 }
 
 // A gate and what opens it.
@@ -298,8 +301,8 @@ test('checks off step one and starts step two when progress reaches 100', async 
 
   expect(await report($, 'Read your brand notes', 100)).toMatchObject({ result: 'Progress noted: 100%.' })
   expect((await bandOf($)).slice(1, 3)).toEqual([
-    `${'✓ 📖 Read your brand notes'.padEnd(32)}██████████  Done`,
-    `${'▶ 🔨 Build the pricing section'.padEnd(32)}███░░░░░░░  Working`,
+    `  ${'✓ 📖 Read your brand notes'.padEnd(32)}██████████  Done`,
+    `  ${'▶ 🔨 Build the pricing section'.padEnd(32)}███░░░░░░░  Working`,
   ])
 })
 
@@ -501,10 +504,10 @@ for (const surface of SURFACES) {
     await report($, 'Build the pricing section', 60)
 
     expect((await bandOf($, surface)).slice(1)).toEqual([
-      `${'✓ 📖 Read your brand notes'.padEnd(32)}██████████  Done`,
-      `${'▶ 🔨 Build the pricing section'.padEnd(32)}██████░░░░  60%`,
-      `${'○ 🔨 Add the contact form'.padEnd(32)}░░░░░░░░░░  Next`,
-      `${'○ 🎨 Polish the footer'.padEnd(32)}░░░░░░░░░░  Up next`,
+      `  ${'✓ 📖 Read your brand notes'.padEnd(32)}██████████  Done`,
+      `  ${'▶ 🔨 Build the pricing section'.padEnd(32)}██████░░░░  60%`,
+      `  ${'○ 🔨 Add the contact form'.padEnd(32)}░░░░░░░░░░  Next`,
+      `  ${'○ 🎨 Polish the footer'.padEnd(32)}░░░░░░░░░░  Up next`,
     ])
   })
 }
@@ -521,8 +524,8 @@ test('follows tasks as Claude creates, starts and finishes them', async ($, on) 
   await call($, { tool: 'TaskUpdate', taskId: '2', status: 'in_progress' })
 
   expect((await bandOf($)).slice(1)).toEqual([
-    `${'✓ 📖 Read your brand notes'.padEnd(28)}██████████  Done`,
-    `${'▶ 🔨 Add the contact form'.padEnd(28)}███░░░░░░░  Working`,
+    `  ${'✓ 📖 Read your brand notes'.padEnd(28)}██████████  Done`,
+    `  ${'▶ 🔨 Add the contact form'.padEnd(28)}███░░░░░░░  Working`,
   ])
 })
 
@@ -547,7 +550,7 @@ test('shows Needs you when a permission prompt opens, and pauses the current ste
   const [header, current] = await bandOf($)
 
   expect(header).toBe(` Needs you  Claude needs your OK to continue${ON}`)
-  expect(current?.startsWith('‖ 📖 Read your brand notes')).toBe(true)
+  expect(current?.startsWith('  ‖ 📖 Read your brand notes')).toBe(true)
 })
 
 test('shows Needs you the moment permission is asked for', async ($, on) => {
@@ -748,7 +751,7 @@ test('names the job after what went before when the person replies to a job that
   expect(world.naming[1]?.prompt).toMatch(/yes/)
 })
 
-test('shows All done with how long it took, then shrinks to one line after five seconds', async ($, on) => {
+test('shows All done with how long it took, and keeps the steps until the next prompt', async ($, on) => {
   const { clock } = boot(on)
   await start($, clock)
   await ask($, clock)
@@ -760,13 +763,16 @@ test('shows All done with how long it took, then shrinks to one line after five 
   expect(await bandOf($)).toHaveLength(5)
   expect(await headerOf($)).toBe(`✓ All done · Build bakery landing page · took 2m 14s${ON}`)
 
-  await clock.advance(4900)
+  await clock.advance(600_000)
 
   expect(await bandOf($)).toHaveLength(5)
 
-  await clock.advance(200)
+  await ask($, clock, 'Now add a gallery', 't2')
+  const next = await bandOf($)
 
-  expect(await bandOf($)).toEqual([`✓ All done · Build bakery landing page · took 2m 14s${ON}`])
+  // The new job's two placeholder steps in place of the four of the one before.
+  expect(next).toHaveLength(3)
+  expect(next[1]?.startsWith('  ▶ 🤔 Understand your request')).toBe(true)
 })
 
 test('is all done after a quick answer that needed no plan', async ($, on) => {
@@ -954,7 +960,7 @@ test('moves the sweep of a step nothing was reported for with the frame counter'
   await plan($)
   await clock.advance(1000)
 
-  expect((await bandOf($))[1]).toBe(`${'▶ 📖 Read your brand notes'.padEnd(32)}░░░░███░░░  Working`)
+  expect((await bandOf($))[1]).toBe(`  ${'▶ 📖 Read your brand notes'.padEnd(32)}░░░░███░░░  Working`)
 })
 
 test('runs no timer once it is turned off in the middle of a job', async ($, on) => {
@@ -1248,8 +1254,6 @@ test('opens the checklist as a tab of the dock as the session starts, as wide as
   await start($, clock)
 
   expect(world.opened).toEqual([{ id: 'checklist', title: 'Checklist', columns: 32 }])
-  // The band is drawn again once the tab has its place, to leave the checklist to it.
-  expect(world.redraws).toBeGreaterThan(0)
 })
 
 test('opens no tab in a session nobody watches', async ($, on) => {
@@ -1294,26 +1298,26 @@ test('says in the Checklist tab that no job has run yet', async ($, on) => {
   expect(await paneOf($, 'checklist')).toEqual(['No job yet: your next request', 'shows here as a checklist.', ON])
 })
 
-test('leaves the band to the other mod while the checklist is in the dock', async ($, on) => {
+test('shows the checklist above the prompt while its tab is in the dock as well', async ($, on) => {
+  const { clock } = docked(on)
+  await start($, clock)
+  await ask($, clock)
+  await plan($)
+
+  expect(await bandOf($)).toEqual([`Build bakery landing page · 0s${ON}`, ...ROWS.planned])
+})
+
+test("shares the band with another mod's as two tabs while the checklist is in the dock, as it does without", async ($, on) => {
   const { world, clock } = docked(on)
   world.band = STATUS_BAND
   await start($, clock)
   await ask($, clock)
   await plan($)
 
-  expect(await allLines($)).toEqual(['status band'])
+  expect(await allLines($)).toEqual([`${TABS.checklist}${ON}`, 'Build bakery landing page · 0s', ...ROWS.planned])
 })
 
-test("leaves the band to the engine's own drawing while the checklist is in the dock and no other mod draws there", async ($, on) => {
-  const { clock } = docked(on)
-  await start($, clock)
-  await ask($, clock)
-  await plan($)
-
-  expect(await bandTree($)).toEqual(OWN_BAND)
-})
-
-test('shows the checklist above the prompt again once its tab is closed, and does not open the tab again', async ($, on) => {
+test('keeps the checklist above the prompt once its tab is closed, and does not open the tab again', async ($, on) => {
   const { world, clock } = docked(on)
   world.band = STATUS_BAND
   await start($, clock)
@@ -1407,4 +1411,144 @@ test("marks the tab with the state of the job, for it to be read from another ta
   await finish($, clock)
 
   expect(world.opened.at(-1)?.title).toBe('Checklist ✓')
+})
+
+// ── What Claude did in a step, opened from the band ─────────────────────────
+
+// Where what a step did starts: under its name, past its arrow, mark and emoji.
+const UNDER = ' '.repeat(7)
+
+// The first step's row, closed or opened: a button, its arrow first.
+const FIRST = {
+  closed: `‹▸ ${'▶ 📖 Read your brand notes'.padEnd(32)}███░░░░░░░  Working›`,
+  opened: `‹▾ ${'▶ 📖 Read your brand notes'.padEnd(32)}███░░░░░░░  Working›`,
+}
+
+// The person clicks a button in the band.
+const press = async ($: Engine, key: string) => {
+  const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
+  await ui.press({ key })
+  await ui.unmount()
+}
+
+const planned = async ($: Engine, clock: MockClock) => {
+  await start($, clock)
+  await ask($, clock)
+  await plan($)
+}
+
+test('puts what Claude does under the step at work, and opens the step at a press', async ($, on) => {
+  const { clock } = boot(on)
+  await planned($, clock)
+  await bash($, { description: 'List the files' })
+
+  expect((await bandOf($)).slice(1)).toEqual([FIRST.closed, ...ROWS.planned.slice(1)])
+
+  await press($, 'open-step-1')
+
+  expect((await bandOf($)).slice(1)).toEqual([FIRST.opened, `${UNDER}✓ Ran: List the files`, ...ROWS.planned.slice(1)])
+})
+
+test('closes an opened step at a second press', async ($, on) => {
+  const { clock } = boot(on)
+  await planned($, clock)
+  await bash($, { description: 'List the files' })
+  await press($, 'open-step-1')
+  await press($, 'open-step-1')
+
+  expect((await bandOf($)).slice(1)).toEqual([FIRST.closed, ...ROWS.planned.slice(1)])
+})
+
+test('says why an action failed, in its first line that says something', async ($, on) => {
+  const { world, clock } = boot(on)
+  world.answers.Bash = { result: '', text: 'Exit code 1\nnpm ERR! missing script: test', isError: true } as ToolCallResult
+  await planned($, clock)
+  await bash($, { description: 'Run the tests' })
+  await press($, 'open-step-1')
+
+  expect((await bandOf($))[2]).toBe(`${UNDER}✗ Ran: Run the tests · failed: npm ERR! missing script: test`)
+})
+
+test('says the person said no to an action they turned down', async ($, on) => {
+  const { world, clock } = boot(on)
+  world.answers.Bash = { deny: "The user doesn't want to proceed with this tool use." }
+  await planned($, clock)
+  await bash($, { description: 'Delete the old build' })
+  await press($, 'open-step-1')
+
+  expect((await bandOf($))[2]).toBe(`${UNDER}✗ Ran: Delete the old build · failed: you said no`)
+})
+
+test('says a helper Claude started by what it was asked to do', async ($, on) => {
+  const { clock } = boot(on)
+  await planned($, clock)
+  await call($, { tool: 'Agent', description: 'Review the code', prompt: 'Review it' })
+  await press($, 'open-step-1')
+
+  expect((await bandOf($))[2]).toBe(`${UNDER}✓ Started a helper: Review the code`)
+})
+
+test("leads an opened step with the note Claude gave when it reported the step", async ($, on) => {
+  const { clock } = boot(on)
+  await planned($, clock)
+  await call($, { tool: REPORT_PROGRESS, task: 'Read your brand notes', percent: 100, note: 'The brand is warm and friendly.' })
+  await press($, 'open-step-1')
+  const lines = await bandOf($)
+
+  expect(lines[1]?.startsWith('‹▾ ✓ 📖 Read your brand notes')).toBe(true)
+  expect(lines[2]).toBe(`${UNDER}The brand is warm and friendly.`)
+})
+
+test("keeps no action for its own tools, the to-do tools or a helper's own calls", async ($, on) => {
+  const { clock } = boot(on)
+  await planned($, clock)
+  await report($, 'Read your brand notes', 40)
+  await call($, { tool: 'TodoWrite', todos: [] })
+  await bash($, { description: 'List the files', agentId: 'a1' })
+
+  expect((await bandOf($))[1]).toBe(`  ${'▶ 📖 Read your brand notes'.padEnd(32)}████░░░░░░  40%`)
+})
+
+test('gives no button to a step with nothing to show', async ($, on) => {
+  const { clock } = boot(on)
+  await planned($, clock)
+  const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
+  const drawn = (await ui.drawn()) as Drawn
+  await ui.unmount()
+
+  expect((drawn.children ?? []).filter(child => isDrawn(child) && child.type === 'Button')).toEqual([])
+})
+
+test('starts every job with its steps closed', async ($, on) => {
+  const { clock } = boot(on)
+  await planned($, clock)
+  await bash($, { description: 'List the files' })
+  await press($, 'open-step-1')
+  await report($, 'Polish the footer', 100)
+  await finish($, clock)
+  await ask($, clock, 'Now add a gallery', 't2')
+  await plan($)
+  await bash($, { description: 'List the files' })
+
+  expect((await bandOf($))[1]).toBe(FIRST.closed)
+})
+
+test('gives Claude a place for a note when it reports a step, and asks it to write one', async ($, on) => {
+  const { world, clock } = boot(on)
+  await start($, clock)
+  const { sections } = await compose($)
+
+  expect(world.tools[1]?.inputSchema).toMatchObject({ properties: { note: { type: 'string' } }, required: ['task', 'percent'] })
+  expect(sections.at(-1)?.text).toMatch(/note/)
+})
+
+test('keeps the Checklist tab a plain list: no arrows, nothing of what a step did', async ($, on) => {
+  const { clock } = docked(on)
+  await planned($, clock)
+  await bash($, { description: 'List the files' })
+  await press($, 'open-step-1')
+  const lines = await paneOf($, 'checklist')
+
+  expect(lines[3]).toBe('▶ 📖 Read your brand notes')
+  expect(lines.some(line => line.includes('List the files') || line.includes('▸') || line.includes('▾'))).toBe(false)
 })
