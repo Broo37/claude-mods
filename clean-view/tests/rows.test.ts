@@ -87,10 +87,10 @@ test('never draws a header wider than its room', () => {
 
 test('draws a done, a current, a next and a later step each its own way', () => {
   expect(linesOf(halfway())).toEqual([
-    `${'✓ Read your brand notes'.padEnd(29)}██████████  Done`,
-    `${'▶ Build the pricing section'.padEnd(29)}██████░░░░  60%`,
-    `${'○ Add the contact form'.padEnd(29)}░░░░░░░░░░  Next`,
-    `${'○ Polish the footer'.padEnd(29)}░░░░░░░░░░  Up next`,
+    `${'✓ 📖 Read your brand notes'.padEnd(32)}██████████  Done`,
+    `${'▶ 🔨 Build the pricing section'.padEnd(32)}██████░░░░  60%`,
+    `${'○ 🔨 Add the contact form'.padEnd(32)}░░░░░░░░░░  Next`,
+    `${'○ 🎨 Polish the footer'.padEnd(32)}░░░░░░░░░░  Up next`,
   ])
 })
 
@@ -98,10 +98,11 @@ test('colors a done step green and dim, the current one bold, the rest dim', () 
   const [doneRow = [], currentRow = [], nextRow = []] = rowsOf(halfway(), 0, 120)
 
   expect(doneRow[0]).toMatchObject({ text: '✓ ', color: 'success' })
-  expect(doneRow[1]?.isDim).toBe(true)
+  expect(doneRow[1]).toMatchObject({ text: '📖 ' })
+  expect(doneRow[2]?.isDim).toBe(true)
   // A full meter a row would stack into a bright slab: a done step's is dim.
-  expect(doneRow[2]).toEqual({ text: '██████████', color: 'success', isDim: true })
-  expect(currentRow[1]?.isBold).toBe(true)
+  expect(doneRow[3]).toEqual({ text: '██████████', color: 'success', isDim: true })
+  expect(currentRow[2]?.isBold).toBe(true)
   expect(nextRow.every(run => run.isDim === true)).toBe(true)
 })
 
@@ -118,11 +119,11 @@ test('sweeps the meter of a step nothing was reported for yet, and calls it Work
 test('pauses the current step while the job waits on the person', () => {
   const [, current = ''] = linesOf(needsYou(halfway(), REASONS.ok))
 
-  expect(current).toBe(`${'‖ Build the pricing section'.padEnd(29)}██████░░░░  60%`)
+  expect(current).toBe(`${'‖ 🔨 Build the pricing section'.padEnd(32)}██████░░░░  60%`)
 })
 
 test('says Paused, with no sweep, for a step nothing was reported for while the job waits or is stuck', () => {
-  const paused = `${'‖ Read your brand notes'.padEnd(29)}░░░░░░░░░░  Paused`
+  const paused = `${'‖ 📖 Read your brand notes'.padEnd(32)}░░░░░░░░░░  Paused`
 
   expect(linesOf(needsYou(planned(), REASONS.ok), 4)[0]).toBe(paused)
   expect(linesOf(stuck(planned(), REASONS.saidNo), 4)[0]).toBe(paused)
@@ -131,7 +132,7 @@ test('says Paused, with no sweep, for a step nothing was reported for while the 
 test('says Stopped for the step the person interrupted', () => {
   const stopped = endTurn(planned(), { reason: 'aborted', answer: '' }, NOW + 9000)
 
-  expect(linesOf(stopped, 4)[0]).toBe(`${'■ Read your brand notes'.padEnd(29)}░░░░░░░░░░  Stopped`)
+  expect(linesOf(stopped, 4)[0]).toBe(`${'■ 📖 Read your brand notes'.padEnd(32)}░░░░░░░░░░  Stopped`)
 })
 
 test('pulses the Needs you badge slowly, a second lit and a second plain', () => {
@@ -151,7 +152,7 @@ test('draws no rows for a job that shrank to one line, or while no job has run',
 })
 
 test('sizes the name column to the room, so that no row is wider than it', () => {
-  for (const columns of [28, 34, 50]) {
+  for (const columns of [31, 34, 50]) {
     const lines = linesOf(halfway(), 0, columns)
 
     expect(lines.every(line => line.length <= columns)).toBe(true)
@@ -159,14 +160,14 @@ test('sizes the name column to the room, so that no row is wider than it', () =>
     expect(lines[1]).toMatch(/█{6}░{4} {2}60%$/)
   }
 
-  // Thirty-four columns leave the name eleven.
-  expect(linesOf(halfway(), 0, 34)[1]).toBe(`${'▶ Build the…'.padEnd(15)}██████░░░░  60%`)
+  // Thirty-four columns leave the name eight.
+  expect(linesOf(halfway(), 0, 34)[1]).toBe(`${'▶ 🔨 Build t…'.padEnd(15)}██████░░░░  60%`)
 })
 
 test('keeps the name column no wider than its longest name needs, and never under twenty', () => {
   const short = planSteps(startJob('Say hello', NOW), ['Say hello', 'Wave'], NOW)
 
-  expect(linesOf(short)[1]).toBe(`${'○ Wave'.padEnd(24)}░░░░░░░░░░  Next`)
+  expect(linesOf(short)[1]).toBe(`${'○ 🔹 Wave'.padEnd(27)}░░░░░░░░░░  Next`)
 })
 
 // The Checklist tab of the dock and the strip over the Waterfall tab: thirty
@@ -182,11 +183,11 @@ test('stacks the checklist in a narrow tab: the job, its state, then a line a st
     'Build my landing page',
     '▶ Working · 1m 12s',
     ' ',
-    '✓ Read your brand notes',
-    '▶ Build the pricing section',
-    '  ██████░░░░  60%',
-    '○ Add the contact form',
-    '○ Polish the footer',
+    '✓ 📖 Read your brand notes',
+    '▶ 🔨 Build the pricing section',
+    '     ██████░░░░  60%',
+    '○ 🔨 Add the contact form',
+    '○ 🎨 Polish the footer',
   ])
 })
 
@@ -194,12 +195,12 @@ test('gives only the step at work a meter in a narrow tab, as it would in the ba
   const lines = paneLinesOf(planned(), NOW, NARROW, 0)
 
   // Nothing reported yet: the meter sweeps.
-  expect(lines.map(textOf).slice(3, 5)).toEqual(['▶ Read your brand notes', '  ███░░░░░░░  Working'])
+  expect(lines.map(textOf).slice(3, 5)).toEqual(['▶ 📖 Read your brand notes', '     ███░░░░░░░  Working'])
   expect(lines[4]?.[1]).toMatchObject({ text: '███', color: 'claude' })
-  expect(lines[5]?.[1]).toMatchObject({ text: 'Build the pricing section', isDim: true })
+  expect(lines[5]?.[2]).toMatchObject({ text: 'Build the pricing section', isDim: true })
 })
 
-test('cuts a long step name to the tab, and wraps the job and the reason it waits', () => {
+test('wraps a long step name under itself in a narrow tab, and the job and the reason it waits', () => {
   const long = planSteps(startJob('Move the checklist of Clean View into the dock', NOW), ['Write the tests for the stacked layout'], NOW)
   const lines = paneOf(needsYou(long, REASONS.ok), NOW, 24)
 
@@ -210,8 +211,9 @@ test('cuts a long step name to the tab, and wraps the job and the reason it wait
     'Claude needs your OK to',
     'continue',
     ' ',
-    '‖ Write the tests for t…',
-    '  ░░░░░░░░░░  Paused',
+    '‖ 🧪 Write the tests for',
+    '     the stacked layout',
+    '     ░░░░░░░░░░  Paused',
   ])
   expect(lines.every(line => line.length <= 24)).toBe(true)
 })
@@ -242,14 +244,15 @@ test('says in the tab that no job has run yet', () => {
 test('sums up a working job over the waterfall in two lines: the step it is on, then its meter', () => {
   const strip = stripOf(halfway(), NOW + 72_000, NARROW, 0)
 
-  expect(strip.map(textOf)).toEqual(['▶ 2/4 Build the pricing secti…', '  ██████░░░░  60% · 1m 12s'])
+  expect(strip.map(textOf)).toEqual(['▶ 2/4 🔨 Build the pricing se…', '  ██████░░░░  60% · 1m 12s'])
   expect(strip[0]?.[0]).toMatchObject({ text: '▶ ', color: 'claude' })
   expect(strip[0]?.[1]).toMatchObject({ text: '2/4 ', isDim: true })
-  expect(strip[0]?.[2]).toMatchObject({ isBold: true })
+  expect(strip[0]?.[2]).toMatchObject({ text: '🔨 ' })
+  expect(strip[0]?.[3]).toMatchObject({ isBold: true })
 })
 
 test('sums up a job before its plan by the step it starts with, as the band does', () => {
-  expect(stripLinesOf(startJob('Build my landing page', NOW), NOW + 3000)).toEqual(['▶ 1/2 Understand your request', '  ███░░░░░░░  Working · 3s'])
+  expect(stripLinesOf(startJob('Build my landing page', NOW), NOW + 3000)).toEqual(['▶ 1/2 🤔 Understand your requ…', '  ███░░░░░░░  Working · 3s'])
 })
 
 test('sums up a held or ended job over the waterfall by what holds or ended it', () => {
@@ -261,4 +264,25 @@ test('sums up a held or ended job over the waterfall by what holds or ended it',
 
 test('puts nothing over the waterfall while no job has run', () => {
   expect(stripOf(IDLE, NOW, NARROW, 0)).toEqual([])
+})
+
+test("puts the emoji Claude picked before its step, in the band, the tab and the strip", () => {
+  const picked = planSteps(startJob('Ship it', NOW), ['🧹 Read your brand notes', 'Build the pricing section'], NOW)
+
+  expect(linesOf(picked)[0]?.startsWith('▶ 🧹 Read your brand notes')).toBe(true)
+  expect(paneOf(picked)[3]).toBe('▶ 🧹 Read your brand notes')
+  expect(stripLinesOf(picked)[0]).toBe('▶ 1/2 🧹 Read your brand notes')
+  // Where Claude picked none, one is guessed from the name.
+  expect(paneOf(picked)[5]).toBe('○ 🔨 Build the pricing section')
+})
+
+// A half of an emoji: what a cut through the middle of one leaves.
+const HALF = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/
+
+test('never cuts an emoji in half, however narrow the room', () => {
+  for (let columns = 1; columns <= 12; columns += 1) {
+    for (const line of [...stripLinesOf(halfway(), NOW, columns), ...linesOf(halfway(), 0, columns)]) {
+      expect(line).not.toMatch(HALF)
+    }
+  }
 })

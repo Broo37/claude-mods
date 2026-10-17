@@ -1,3 +1,4 @@
+import { pickedIcon } from './icons'
 import { cleanName } from './names'
 import type { CleanViewChecklist as Checklist, CleanViewTask as Task } from '../types'
 
@@ -42,13 +43,20 @@ export const IDLE: Checklist = {
   isCollapsed: false,
 }
 
-const stepOf = (id: string, name: string, status: Task['status'] = 'upcoming'): Task => ({
-  id,
-  name: cleanName(name),
-  status,
-  percent: status === 'done' ? 100 : 0,
-  hasReported: false,
-})
+// A step of a raw name: the emoji Claude started it with, where it is one of
+// the set, kept apart from the name.
+const stepOf = (id: string, raw: string, status: Task['status'] = 'upcoming'): Task => {
+  const { icon, rest } = pickedIcon(raw)
+
+  return {
+    id,
+    name: cleanName(rest),
+    ...(icon !== null && { icon }),
+    status,
+    percent: status === 'done' ? 100 : 0,
+    hasReported: false,
+  }
+}
 
 const done = (task: Task): Task => ({ ...task, status: 'done', percent: 100 })
 
@@ -172,7 +180,7 @@ const afterCurrent = (tasks: readonly Task[]) => {
 export const reportProgress = (list: Checklist, name: string, percent: number, now: number): Checklist => {
   const job = underway(list, now)
   const amount = percentOf(percent)
-  const wanted = cleanName(name).toLowerCase()
+  const wanted = cleanName(pickedIcon(name).rest).toLowerCase()
   const tasks = planned(job)
   const found = tasks.findIndex(task => task.name.toLowerCase() === wanted)
   const at = found < 0 ? afterCurrent(tasks) : found
@@ -251,7 +259,9 @@ export const changeTask = (list: Checklist, id: string, change: TaskChange): Che
         return task
       }
 
-      const named = change.subject === undefined ? task : { ...task, name: cleanName(change.subject) }
+      // A new name brings its own emoji, or none.
+      const named =
+        change.subject === undefined ? task : { ...stepOf(task.id, change.subject), status: task.status, percent: task.percent, hasReported: task.hasReported }
 
       return status === undefined ? named : status === 'done' ? done(named) : { ...named, status }
     }),

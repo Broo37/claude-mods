@@ -177,6 +177,36 @@ test('leaves the checklist alone when an empty to-do list is written', () => {
   expect(fromTodos(planned(), [], NOW)).toEqual(planned())
 })
 
+// The steps as "emoji name", where Claude picked an emoji: "-" where it did not.
+const icons = (list: CleanViewChecklist) => list.tasks.map(task => `${task.icon ?? '-'} ${task.name}`)
+
+test("keeps the emoji Claude starts a step with apart from the step's name", () => {
+  const job = planSteps(startJob('Ship it', NOW), ['🔍 Check what changed', '🎯 Aim for the goal', 'Save the changes'], NOW)
+
+  expect(icons(job)).toEqual(['🔍 Check what changed', '- Aim for the goal', '- Save the changes'])
+  // A step that came with none has no emoji of its own: one is guessed as it is drawn.
+  expect('icon' in (job.tasks[2] ?? {})).toBe(false)
+})
+
+test('finds a reported step whether it is named with its emoji or without', () => {
+  const job = planSteps(startJob('Ship it', NOW), ['🔍 Check what changed', '💾 Save the changes'], NOW)
+
+  expect(steps(reportProgress(job, 'Check what changed', 100, NOW))).toEqual(['Check what changed:done:100', 'Save the changes:active:0'])
+  expect(steps(reportProgress(job, '🔍 Check what changed', 100, NOW))).toEqual(['Check what changed:done:100', 'Save the changes:active:0'])
+  expect(icons(reportProgress(job, '🐛 Fix a broken link', 10, NOW))[1]).toBe('🐛 Fix a broken link')
+})
+
+test('keeps the emoji of a to-do item and of a task, also once it is renamed', () => {
+  const todos = fromTodos(startJob('Ship it', NOW), [{ content: '📖 Read your brand notes', status: 'in_progress' }], NOW)
+  const task = addTask(startJob('Ship it', NOW), '1', '🧪 Run the tests', NOW)
+
+  expect(icons(todos)).toEqual(['📖 Read your brand notes'])
+  expect(icons(task)).toEqual(['🧪 Run the tests'])
+  expect(icons(changeTask(task, '1', { subject: '🚀 Push the release' }))).toEqual(['🚀 Push the release'])
+  expect(icons(changeTask(task, '1', { subject: 'Push the release' }))).toEqual(['- Push the release'])
+  expect(steps(changeTask(changeTask(task, '1', { status: 'in_progress' }), '1', { subject: 'Push it' }))).toEqual(['Push it:active:0'])
+})
+
 test('adds a created task as an upcoming step in place of the placeholders', () => {
   const job = addTask(addTask(startJob('Build my landing page', NOW), '1', 'Read your brand notes', NOW), '2', 'Add the contact form', NOW)
 

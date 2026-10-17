@@ -1,3 +1,4 @@
+import { iconOf } from './icons'
 import type { CleanViewChecklist as Checklist, CleanViewTask as Task } from '../types'
 
 // What the band shows of a checklist, as runs of text with a theme color, bold,
@@ -33,9 +34,15 @@ const SWEEP = 3
 // The frames of one pulse of the Needs you badge: half of them lit.
 const PULSE = 8
 
-// What a row holds beside the name: its mark, the gaps, the meter and the
-// longest label ("Up next", "Working").
-const BESIDE = 2 + 2 + METER + 2 + 7
+// A step's emoji and the space after it: an emoji is two columns wide.
+const ICON = 3
+
+// What a row holds beside the name: its mark, its emoji, the gaps, the meter
+// and the longest label ("Up next", "Working").
+const BESIDE = 2 + ICON + 2 + METER + 2 + 7
+
+// Where a step's name starts in a stacked tab: after its mark and its emoji.
+const INDENT = 2 + ICON
 
 // The name column: as wide as the longest name needs, within these.
 const NARROWEST = 20
@@ -59,12 +66,19 @@ export const durationOf = (ms: number): string => {
   return `${Math.floor(whole / SECOND)}s`
 }
 
+// The start of a text in the room, short of an emoji the end would cut in half.
+const startOf = (text: string, room: number) => {
+  const part = text.slice(0, Math.max(0, room))
+
+  return /[\uD800-\uDBFF]$/.test(part) ? part.slice(0, -1) : part
+}
+
 const cut = (text: string, room: number) => {
   if (text.length <= room) {
     return text
   }
 
-  return room < 1 ? '' : `${text.slice(0, room - 1).trimEnd()}…`
+  return room < 1 ? '' : `${startOf(text, room - 1).trimEnd()}…`
 }
 
 // The runs within the room: the one that gives way is cut first, and whatever
@@ -76,7 +90,7 @@ const fitted = (runs: readonly Run[], flexible: number, columns: number): Run[] 
   return runs
     .map((run, i) => (i === flexible ? { ...run, text: cut(run.text, columns - others) } : run))
     .map(run => {
-      const text = run.text.slice(0, Math.max(0, room))
+      const text = startOf(run.text, room)
       room -= text.length
 
       return { ...run, text }
@@ -192,9 +206,12 @@ const gaugeOf = (task: Task, phase: Checklist['phase'], tick: number): Run[] => 
 }
 
 const rowOf = (task: Task, name: string, phase: Checklist['phase'], isNext: boolean, tick: number): Run[] => {
+  const icon = `${iconOf(task)} `
+
   if (task.status === 'done') {
     return [
       { text: '✓ ', color: 'success' },
+      { text: icon, isDim: true },
       { text: name, isDim: true },
       // Full meters a row apart read as one bright slab: a done step's is dim.
       { text: '█'.repeat(METER), color: 'success', isDim: true },
@@ -203,11 +220,12 @@ const rowOf = (task: Task, name: string, phase: Checklist['phase'], isNext: bool
   }
 
   if (task.status === 'active') {
-    return [markOf(phase), { text: name, isBold: true }, ...gaugeOf(task, phase, tick)]
+    return [markOf(phase), { text: icon }, { text: name, isBold: true }, ...gaugeOf(task, phase, tick)]
   }
 
   return [
     { text: '○ ', isDim: true },
+    { text: icon, isDim: true },
     { text: name, isDim: true },
     { text: '░'.repeat(METER), isDim: true },
     { text: isNext ? '  Next' : '  Up next', isDim: true },
@@ -259,25 +277,23 @@ const stateOf = (list: Checklist, now: number, columns: number, tick: number): R
   }
 }
 
-// The steps a line each, the one at work with its meter under it.
+// The steps a line each, a long name wrapped under itself, and the one at work
+// with its meter under it.
 const stackedOf = (list: Checklist, columns: number, tick: number): Run[][] => {
-  const room = Math.max(1, columns - 2)
+  const room = Math.max(1, columns - INDENT)
+  const under: Run = { text: ' '.repeat(INDENT) }
 
   return list.tasks.flatMap((task): Run[][] => {
-    const name = cut(task.name, room)
+    const [first = '', ...more] = wrapped(task.name, room)
+    const isActive = task.status === 'active'
+    const look = isActive ? { isBold: true } : { isDim: true }
+    const mark = task.status === 'done' ? { text: '✓ ', color: 'success' } : isActive ? markOf(list.phase) : { text: '○ ', isDim: true }
+    const lines: Run[][] = [
+      [mark, { text: `${iconOf(task)} `, ...(!isActive && { isDim: true }) }, { text: first, ...look }],
+      ...more.map((line): Run[] => [under, { text: line, ...look }]),
+    ]
 
-    if (task.status === 'done') {
-      return [[{ text: '✓ ', color: 'success' }, { text: name, isDim: true }]]
-    }
-
-    if (task.status === 'active') {
-      return [
-        [markOf(list.phase), { text: name, isBold: true }],
-        [{ text: '  ' }, ...gaugeOf(task, list.phase, tick)],
-      ]
-    }
-
-    return [[{ text: '○ ', isDim: true }, { text: name, isDim: true }]]
+    return isActive ? [...lines, [under, ...gaugeOf(task, list.phase, tick)]] : lines
   })
 }
 
@@ -320,9 +336,10 @@ export const stripOf = (list: Checklist, now: number, columns: number, tick: num
   switch (list.phase) {
     case 'working': {
       const lead = count === '' ? [] : [{ text: `${count} `, isDim: true }]
+      const named: Run[] = task === undefined ? [{ text: list.title, isBold: true }] : [{ text: `${iconOf(task)} ` }, { text: task.name, isBold: true }]
 
       return [
-        fitted([markOf(list.phase), ...lead, { text: task?.name ?? list.title, isBold: true }], 1 + lead.length, columns),
+        fitted([markOf(list.phase), ...lead, ...named], lead.length + named.length, columns),
         fitted(
           [{ text: '  ' }, ...(task === undefined ? [...sweepOf(tick), { text: '  Working' }] : gaugeOf(task, list.phase, tick)), { text: ` · ${durationOf(now - started)}`, isDim: true }],
           -1,

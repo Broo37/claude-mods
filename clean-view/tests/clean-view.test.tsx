@@ -251,12 +251,12 @@ const rowOf = async ($: Engine, component: 'ToolUse' | 'ToolResult' | 'ToolGroup
 
 const ROWS = {
   planned: [
-    `${'▶ Read your brand notes'.padEnd(29)}███░░░░░░░  Working`,
-    `${'○ Build the pricing section'.padEnd(29)}░░░░░░░░░░  Next`,
-    `${'○ Add the contact form'.padEnd(29)}░░░░░░░░░░  Up next`,
-    `${'○ Polish the footer'.padEnd(29)}░░░░░░░░░░  Up next`,
+    `${'▶ 📖 Read your brand notes'.padEnd(32)}███░░░░░░░  Working`,
+    `${'○ 🔨 Build the pricing section'.padEnd(32)}░░░░░░░░░░  Next`,
+    `${'○ 🔨 Add the contact form'.padEnd(32)}░░░░░░░░░░  Up next`,
+    `${'○ 🎨 Polish the footer'.padEnd(32)}░░░░░░░░░░  Up next`,
   ],
-  placeholders: [`${'▶ Understand your request'.padEnd(27)}███░░░░░░░  Working`, `${'○ Plan the steps'.padEnd(27)}░░░░░░░░░░  Next`],
+  placeholders: [`${'▶ 🤔 Understand your request'.padEnd(30)}███░░░░░░░  Working`, `${'○ 📋 Plan the steps'.padEnd(30)}░░░░░░░░░░  Next`],
 }
 
 // A gate and what opens it.
@@ -298,8 +298,8 @@ test('checks off step one and starts step two when progress reaches 100', async 
 
   expect(await report($, 'Read your brand notes', 100)).toMatchObject({ result: 'Progress noted: 100%.' })
   expect((await bandOf($)).slice(1, 3)).toEqual([
-    `${'✓ Read your brand notes'.padEnd(29)}██████████  Done`,
-    `${'▶ Build the pricing section'.padEnd(29)}███░░░░░░░  Working`,
+    `${'✓ 📖 Read your brand notes'.padEnd(32)}██████████  Done`,
+    `${'▶ 🔨 Build the pricing section'.padEnd(32)}███░░░░░░░  Working`,
   ])
 })
 
@@ -501,10 +501,10 @@ for (const surface of SURFACES) {
     await report($, 'Build the pricing section', 60)
 
     expect((await bandOf($, surface)).slice(1)).toEqual([
-      `${'✓ Read your brand notes'.padEnd(29)}██████████  Done`,
-      `${'▶ Build the pricing section'.padEnd(29)}██████░░░░  60%`,
-      `${'○ Add the contact form'.padEnd(29)}░░░░░░░░░░  Next`,
-      `${'○ Polish the footer'.padEnd(29)}░░░░░░░░░░  Up next`,
+      `${'✓ 📖 Read your brand notes'.padEnd(32)}██████████  Done`,
+      `${'▶ 🔨 Build the pricing section'.padEnd(32)}██████░░░░  60%`,
+      `${'○ 🔨 Add the contact form'.padEnd(32)}░░░░░░░░░░  Next`,
+      `${'○ 🎨 Polish the footer'.padEnd(32)}░░░░░░░░░░  Up next`,
     ])
   })
 }
@@ -521,8 +521,8 @@ test('follows tasks as Claude creates, starts and finishes them', async ($, on) 
   await call($, { tool: 'TaskUpdate', taskId: '2', status: 'in_progress' })
 
   expect((await bandOf($)).slice(1)).toEqual([
-    `${'✓ Read your brand notes'.padEnd(25)}██████████  Done`,
-    `${'▶ Add the contact form'.padEnd(25)}███░░░░░░░  Working`,
+    `${'✓ 📖 Read your brand notes'.padEnd(28)}██████████  Done`,
+    `${'▶ 🔨 Add the contact form'.padEnd(28)}███░░░░░░░  Working`,
   ])
 })
 
@@ -547,7 +547,7 @@ test('shows Needs you when a permission prompt opens, and pauses the current ste
   const [header, current] = await bandOf($)
 
   expect(header).toBe(` Needs you  Claude needs your OK to continue${ON}`)
-  expect(current?.startsWith('‖ Read your brand notes')).toBe(true)
+  expect(current?.startsWith('‖ 📖 Read your brand notes')).toBe(true)
 })
 
 test('shows Needs you the moment permission is asked for', async ($, on) => {
@@ -954,7 +954,7 @@ test('moves the sweep of a step nothing was reported for with the frame counter'
   await plan($)
   await clock.advance(1000)
 
-  expect((await bandOf($))[1]).toBe(`${'▶ Read your brand notes'.padEnd(29)}░░░░███░░░  Working`)
+  expect((await bandOf($))[1]).toBe(`${'▶ 📖 Read your brand notes'.padEnd(32)}░░░░███░░░  Working`)
 })
 
 test('runs no timer once it is turned off in the middle of a job', async ($, on) => {
@@ -1278,11 +1278,11 @@ test('draws the job, its steps and the switch in the Checklist tab', async ($, o
     'Build bakery landing page',
     '▶ Working · 0s',
     ' ',
-    '▶ Read your brand notes',
-    '  ███░░░░░░░  Working',
-    '○ Build the pricing section',
-    '○ Add the contact form',
-    '○ Polish the footer',
+    '▶ 📖 Read your brand notes',
+    '     ███░░░░░░░  Working',
+    '○ 🔨 Build the pricing section',
+    '○ 🔨 Add the contact form',
+    '○ 🎨 Polish the footer',
     ON,
   ])
 })
@@ -1339,7 +1339,7 @@ test('puts the status of the job over the waterfall: the step it is on, then its
   await plan($)
   await report($, 'Read your brand notes', 40)
 
-  expect(await paneOf($, 'waterfall')).toEqual(['▶ 1/4 Read your brand notes', '  ████░░░░░░  40% · 0s', RULE, 'waterfall pane'])
+  expect(await paneOf($, 'waterfall')).toEqual(['▶ 1/4 📖 Read your brand notes', '  ████░░░░░░  40% · 0s', RULE, 'waterfall pane'])
 })
 
 test('leaves the waterfall as it is before any job, and with Clean View off', async ($, on) => {

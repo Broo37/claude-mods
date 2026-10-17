@@ -7,6 +7,9 @@ export type CleanViewStatus = 'done' | 'active' | 'upcoming'
 export type CleanViewTask = {
   id: string
   name: string
+  // The emoji Claude started the step's name with, one of the set; where it
+  // picked none, the checklist guesses one from the name as it draws.
+  icon?: string
   status: CleanViewStatus
   // 0 to 100, as last reported for the step.
   percent: number
