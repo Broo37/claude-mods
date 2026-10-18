@@ -12,6 +12,12 @@ export const BUTTON = { on: '● Clean View: ON', off: '○ Clean View: OFF' } a
 // The band's two tabs, where the checklist shares it with another mod's band.
 export const TABS = { checklist: 'Checklist', status: 'Status' } as const
 
+// The checklist's tab of the dock, shorter than the band's: the engine keeps a
+// tab its title and a cell each side (12 at most) and a gap, and from the tab in
+// front leftward drops the tabs that do not fit. Beside Waterfall, Sessions and
+// Status, `Checklist ▶` needed 44 columns and a dock of 47 has 43, so it fell off.
+export const DOCK_TAB = 'Steps'
+
 // What the checklist's tab says of the job while the other tab is in front.
 export const TAB_MARKS: Record<Checklist['phase'], string> = {
   idle: '',

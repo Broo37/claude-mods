@@ -27,7 +27,7 @@ import {
 } from './checklist'
 import type { TaskChange, Todo } from './checklist'
 import { cleanName, cleanTitle } from './names'
-import { BUTTON, NO_JOB, TABS, TAB_MARKS, bandStepsOf, headerOf, paneLinesOf, stripOf } from './rows'
+import { BUTTON, DOCK_TAB, NO_JOB, TABS, TAB_MARKS, bandStepsOf, headerOf, paneLinesOf, stripOf } from './rows'
 import type { Run } from './rows'
 import { NAMER, PLAN_FIRST, PLAN_STEPS, PLAN_TOOL, PROGRESS_TOOL, REPORT_PROGRESS, SECTION } from './words'
 import type { CleanViewChecklist as Checklist, CleanViewTab as Tab } from '../types'
@@ -62,11 +62,11 @@ const FAILURES = 3
 const BRACKETS = 4
 const GAP = 1
 
-// The Checklist tab of the dock beside the transcript, as wide as its other
-// tabs (Sessions, Waterfall), whose lines stand two columns off its edge as
-// these do. It is the plain list; the band above the prompt keeps the checklist too.
+// The Steps tab of the dock beside the transcript, as wide as its other tabs
+// (Sessions, Waterfall), whose lines stand two columns off its edge as these
+// do. It is the plain list; the band above the prompt keeps the checklist too.
 const GUTTER = 2
-const PANE = { id: 'checklist', title: TABS.checklist, columns: 30 + GUTTER }
+const PANE = { id: 'checklist', title: DOCK_TAB, columns: 30 + GUTTER }
 
 // Another mod's tab of the dock, which the job's status is put over.
 const WATERFALL = 'waterfall'
@@ -103,7 +103,7 @@ let wasAsked = false
 // The calls seen, to name one that came without an id.
 let calls = 0
 
-// The title the Checklist tab was last given.
+// The title the Steps tab was last given.
 let shownTitle: string | null = null
 
 const lookOf = (run: Run) => ({
@@ -639,7 +639,7 @@ export const registerCleanView = (on: On): void => {
     )
   })
 
-  // The Checklist tab: the job, what it is doing, its steps, and the switch.
+  // The Steps tab: the job, what it is doing, its steps, and the switch.
   on('ui.render', { component: 'Pane', requestId: PANE.id }, async ($, e) => {
     const isOn = await read($, enabled)
     const list = isOn ? await read($, checklist) : IDLE

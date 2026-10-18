@@ -59,7 +59,7 @@ A step with a `▸` opens at a click to what Claude did in it: its one-line note
 
 - It starts on. `/simple off` turns it off, `/simple on` turns it on, `/simple` alone flips it. So does a click on the `[ ● Clean View: ON ]` button. The choice is remembered.
 - Off, every hidden row comes back, the tab closes and only the button stays above the prompt. `/simple on` opens the tab again, in front.
-- In a fullscreen terminal the checklist is also a tab of the side pane, beside `Waterfall` and `Sessions` where those mods are loaded: a plain list, no step opens there. The pane is narrow, so each step has a line of its own and the step at work its meter under it. The tab's title carries the job's state (`Checklist ▶`, `Checklist ✓`), so it reads from behind another tab.
+- In a fullscreen terminal the checklist is also a tab of the side pane, `Steps`, beside `Waterfall`, `Sessions` and `Status` where those mods are loaded: a plain list, no step opens there. The pane is narrow, so each step has a line of its own and the step at work its meter under it. The tab's title carries the job's state (`Steps ▶`, `Steps ✓`), so it reads from behind another tab. Its name is short so that all four tabs fit a side pane 47 columns wide: the terminal drops the tabs left of the one in front that do not fit.
 - Over the `tool-waterfall` chart it draws two lines of status: the step at work with its count (`▶ 2/4 🔨 Build the pricing section`), then its meter and the time.
 - Where another mod draws above the prompt too, the two share the space as tabs, `[ Checklist ]  Status`.
 

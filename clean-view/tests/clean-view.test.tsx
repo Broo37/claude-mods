@@ -1253,7 +1253,7 @@ test('opens the checklist as a tab of the dock as the session starts, as wide as
   const { world, clock } = docked(on)
   await start($, clock)
 
-  expect(world.opened).toEqual([{ id: 'checklist', title: 'Checklist', columns: 32 }])
+  expect(world.opened).toEqual([{ id: 'checklist', title: 'Steps', columns: 32 }])
 })
 
 test('opens no tab in a session nobody watches', async ($, on) => {
@@ -1272,7 +1272,7 @@ test('opens no tab while Clean View is off', async ($, on) => {
   expect(world.opened).toEqual([])
 })
 
-test('draws the job, its steps and the switch in the Checklist tab', async ($, on) => {
+test('draws the job, its steps and the switch in the Steps tab', async ($, on) => {
   const { clock } = docked(on)
   await start($, clock)
   await ask($, clock)
@@ -1291,7 +1291,7 @@ test('draws the job, its steps and the switch in the Checklist tab', async ($, o
   ])
 })
 
-test('says in the Checklist tab that no job has run yet', async ($, on) => {
+test('says in the Steps tab that no job has run yet', async ($, on) => {
   const { clock } = docked(on)
   await start($, clock)
 
@@ -1389,7 +1389,7 @@ test('turns Clean View off from the switch in its tab', async ($, on) => {
     component: 'Pane',
     requestId: 'checklist',
     surface: 'terminal',
-    props: { title: 'Checklist', ...PANE_PROPS },
+    props: { title: 'Steps', ...PANE_PROPS },
   } as Parameters<Engine['ui']['mount']>[0])
   await ui.press({ key: 'clean-view' })
   await ui.unmount()
@@ -1405,12 +1405,12 @@ test("marks the tab with the state of the job, for it to be read from another ta
   await ask($, clock)
   await plan($)
 
-  expect(world.opened.at(-1)?.title).toBe('Checklist ▶')
+  expect(world.opened.at(-1)?.title).toBe('Steps ▶')
 
   await report($, 'Polish the footer', 100)
   await finish($, clock)
 
-  expect(world.opened.at(-1)?.title).toBe('Checklist ✓')
+  expect(world.opened.at(-1)?.title).toBe('Steps ✓')
 })
 
 // ── What Claude did in a step, opened from the band ─────────────────────────

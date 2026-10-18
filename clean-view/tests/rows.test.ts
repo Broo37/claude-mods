@@ -1,7 +1,7 @@
 import { expect, test } from 'claude-code/testing'
 
 import { IDLE, REASONS, actionEnded, actionStarted, endTurn, needsYou, planSteps, reportProgress, startJob, stuck } from '../hooks/checklist'
-import { BUTTON, bandStepsOf, durationOf, headerOf, paneLinesOf, rowsOf, stripOf } from '../hooks/rows'
+import { BUTTON, DOCK_TAB, TAB_MARKS, bandStepsOf, durationOf, headerOf, paneLinesOf, rowsOf, stripOf } from '../hooks/rows'
 import type { Run } from '../hooks/rows'
 import type { CleanViewChecklist } from '../types'
 
@@ -392,4 +392,20 @@ test('never cuts an emoji in half in the band, however narrow the room', () => {
 test('keeps the tab a plain list: no arrows and nothing of what a step did', () => {
   expect(paneOf(busy())).toEqual(paneOf(halfway()))
   expect(paneLinesOf(busy(), NOW, 60, 0).map(textOf)).toEqual(paneLinesOf(halfway(), NOW, 60, 0).map(textOf))
+})
+
+// The columns the engine's tab row of the dock keeps for tabs from the one in
+// front leftward: each its title and a cell each side, 12 at most, and a gap.
+const tabRowOf = (titles: string[]) => titles.reduce((sum, title) => sum + Math.min(title.length + 2, 12) + 1, -1)
+
+// A dock 47 columns wide (the one this was seen in) has a tab row of 43.
+const TAB_ROW = 43
+
+test("names the dock's tab short enough to stay beside Waterfall, Sessions and Status, whatever its mark", () => {
+  for (const mark of Object.values(TAB_MARKS)) {
+    expect(tabRowOf([`${DOCK_TAB}${mark}`, 'Waterfall', 'Sessions', 'Status'])).toBeLessThanOrEqual(TAB_ROW)
+  }
+
+  // The name it had fell off the left.
+  expect(tabRowOf(['Checklist ▶', 'Waterfall', 'Sessions', 'Status'])).toBeGreaterThan(TAB_ROW)
 })
