@@ -1,0 +1,7 @@
+{
+  "name": "fold-view",
+  "version": "0.1.0",
+  "description": "Folds every tool call in the transcript to one line in plain words, which a click opens to its full output or diff",
+  "author": { "name": "Broo37" },
+  "types": "./types/index.d.ts"
+}

@@ -5,6 +5,7 @@ Mods for [Claude Code](https://claude.com/claude-code): plugins of function hook
 | Mod | What it does | Yours to set |
 | --- | --- | --- |
 | [`clean-view`](#clean-view) | Hides tool calls, diffs and command output while Claude works, and shows the plan as a checklist above the prompt, where a click opens a step to what Claude did in it, and as a plain list in a tab of the side pane | `/simple on`, `/simple off` |
+| [`fold-view`](#fold-view) | While Clean View is off, folds every tool call in the transcript to one line in plain words with a check or a cross, which a click opens to its full output or diff | |
 | `status-band` | The Awesome Statusline layout in a Status tab of the side pane, its 5H, 7D, Codex and context bars standing upright side by side, with model, git, cost and reset times; a band by the prompt where the tab cannot show; a pet under the list of sessions | `tab`, `size`, `animate`, `position`, `pet`; `/band` brings the tab forward |
 | `transcript-makeover` | Ends every tool row with a check or a red cross and how long the call took, and every turn with a receipt: time, tools, failures, cost and share of the five-hour limit | |
 | `tool-waterfall` | A pane that charts the tool calls of the turn as bars along its time, like a browser's network tab | `/waterfall` opens and closes it |
@@ -34,6 +35,7 @@ claude --plugin-dir path/to/claude-mods/clean-view
 To load several from folders, list them in `CLAUDE_CODE_PLUGIN_DIRS` (under `env` in `settings.json`, `;` between them on Windows) in the order of the table. The first folder is the outermost hook, and the order matters:
 
 - `clean-view` comes first: it wraps the band `status-band` draws and the pane `tool-waterfall` draws, and its hidden rows have to win over the badges of `transcript-makeover`.
+- `fold-view` comes right after it: it folds the rows Clean View lets through while off, and its folded lines have to win over the badges of `transcript-makeover` too.
 - `status-band`, `transcript-makeover` and `tool-waterfall` come before `risky-hold`: a command it refuses never reaches a mod listed after it, so the mods that count and time calls would miss it.
 
 ## Clean View
@@ -77,6 +79,28 @@ A step with a `▸` opens at a click to what Claude did in it: its one-line note
 Declared in `clean-view/types/index.d.ts` under the plugin's name: `cleanViewEnabled`, `checklist` (title, phase, tasks with Claude's `icon`, `note` and `actions`, reasons, times), `tick`, `tab` and `opened` (the steps opened above the prompt).
 
 `cleanview.txt` is the prompt the mod was built from.
+
+## Fold View
+
+For when you want to see what Claude does without reading all of it. Every tool call in the transcript is one line in plain words, folded:
+
+```
+● I'll check the folder first.
+▸ ✓ Ran: List the files in the folder
+▾ ✗ Ran: Run the tests · failed · 4s
+
+● Bash(npm test)
+  ⎿  Error: missing script: test
+
+▸ ✓ Read package.json
+● The tests need a script: there is none in package.json.
+```
+
+- A click on a line opens it to the row Claude Code draws, the command, its output or the diff, exactly as it would without the mod. A second click folds it again. Each line opens on its own and stays open for the session.
+- `✓` done, `✗` failed (in red, with `· failed`), `◌ … · running` while it runs, `■ … · stopped` when you pressed Esc. A call that took 3 seconds or more says how long.
+- The transcript's count lines (`Read 3 files, ran 2 shell commands`) are unfolded, so every call is a line of its own.
+- Claude's written replies are left as they are.
+- Listed after `clean-view`, it shows while Clean View is off (`/simple off`): Clean View on draws no tool rows at all. Alone, it is always on.
 
 ## Develop
 

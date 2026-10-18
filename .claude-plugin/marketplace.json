@@ -9,6 +9,11 @@
       "description": "Hides tool calls, diffs and command output while Claude works, and shows the plan as a checklist above the prompt"
     },
     {
+      "name": "fold-view",
+      "source": "./fold-view",
+      "description": "Folds every tool call in the transcript to one line in plain words, which a click opens to its full output or diff"
+    },
+    {
       "name": "status-band",
       "source": "./status-band",
       "description": "The Awesome Statusline layout as a band above the prompt: model, git, context, 5H/7D limits and Codex 7D"
