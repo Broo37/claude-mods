@@ -19,8 +19,19 @@ import {
   styleIn,
   tailScript,
 } from './parse'
-import { HOPS_MS, PET_COLUMNS, PET_FRAME_MS, PET_HOME, PET_ROWS, isHot, petFrame, petOf } from './pet'
-import type { Creature, Mood } from './pet'
+import {
+  HOPS_MS,
+  PET_COLUMNS,
+  PET_FRAME_MS,
+  PET_HOME,
+  PET_ROWS,
+  isHot,
+  isSpent,
+  petFrame,
+  petOf,
+  petSettlesAt,
+} from './pet'
+import type { Creature, Mood, Standing } from './pet'
 import { tabLinesOf } from './tab'
 import { peerNews, warningsOf } from './warnings'
 
@@ -194,7 +205,7 @@ let working: Timer | null = null
 
 // The pet under the list of the pane: the name its raster is repainted under,
 // the creature the person chose, what the session is doing as the pet shows it
-// and since when, and whether the five-hour limit is nearly spent.
+// and since when, and whether the five-hour limit is nearly spent, or spent.
 const PET = 'pet'
 
 let pet: Creature | null = null
@@ -204,6 +215,19 @@ let mood: Mood = 'asleep'
 let moodAt = 0
 
 let isSweating = false
+
+let isUsedUp = false
+
+// Whether a turn runs, and the tool calls under way, each with its tool and
+// what it was called with: the one a prompt waits on is found among them, and
+// the pet waits until that call is done.
+type CallUnderWay = { tool: string; input: Readonly<Record<string, unknown>> }
+
+let isTurning = false
+
+const underWay = new Set<CallUnderWay>()
+
+let waitingOn: CallUnderWay | null = null
 
 // Where the pet stands, and where it set out on the walk it is on.
 let petX = PET_HOME
@@ -766,16 +790,49 @@ function rowsOf($: EngineInterface, e: Site, shown: View) {
   return { rows, longest }
 }
 
-// The pet's frame at a moment. A walk is drawn from where it set out; without
-// animation the pet stands in the first frame of whatever it is doing.
-const petNow = (creature: Creature, now: number) =>
-  petFrame(creature, mood, isAnimated ? now - moodAt : 0, {
-    isHot: isSweating,
-    x: mood === 'working' ? petFrom : petX,
-  })
+// What the pet's frame cannot tell from its mood: the five-hour limit, and
+// where it stands, which for a walk is where it set out.
+const standingNow = (): Standing => ({
+  isHot: isSweating,
+  isSpent: isUsedUp,
+  x: mood === 'working' ? petFrom : petX,
+})
 
-// Paints the pet's next frame in place. Once it has hopped it falls asleep and
-// is painted no more; a pet whose pane is gone waits to be drawn again.
+// The pet's frame at a moment. Without animation the pet stands in the first
+// frame of whatever it is doing, or in the last of one that comes to rest.
+const petNow = (creature: Creature, now: number) => {
+  const settles = petSettlesAt(creature, mood, standingNow())
+  const ms = isAnimated ? now - moodAt : Number.isFinite(settles) ? settles : 0
+
+  return petFrame(creature, mood, ms, standingNow())
+}
+
+// Whether the pet's frames have stopped changing, so that nothing need paint it.
+const isPetStill = (creature: Creature, now: number) => now - moodAt >= petSettlesAt(creature, mood, standingNow())
+
+// The call under way that a prompt is about: the latest of that tool called
+// with what the prompt shows, else the latest of that tool, else the latest call.
+const callAskedAbout = (calls: ReadonlySet<CallUnderWay>, tool: string, input: unknown) => {
+  const latest = [...calls].reverse()
+  const shown = typeof input === 'object' && input !== null ? Object.entries(input) : []
+  const isShown = (call: CallUnderWay) =>
+    shown.every(([key, value]) => JSON.stringify(call.input[key]) === JSON.stringify(value))
+
+  return (
+    latest.find(call => call.tool === tool && isShown(call)) ?? latest.find(call => call.tool === tool) ?? latest[0] ?? null
+  )
+}
+
+// Once its hops are over the pet goes to sleep.
+const restAfterHops = (now: number) => {
+  if (mood === 'done' && now - moodAt >= HOPS_MS) {
+    mood = 'asleep'
+    moodAt = now
+  }
+}
+
+// Paints the pet's next frame in place, until it comes to rest: asleep, dug
+// in, or still for good; a pet whose pane is gone waits to be drawn again.
 async function stepPet($: EngineInterface) {
   if (isStepping || pet === null) {
     return
@@ -785,12 +842,7 @@ async function stepPet($: EngineInterface) {
 
   try {
     const now = await $.clock.now()
-
-    if (mood === 'done' && now - moodAt >= HOPS_MS) {
-      mood = 'asleep'
-      moodAt = now
-    }
-
+    restAfterHops(now)
     const frame = petNow(pet, now)
     petX = frame.x
     let isGone = petPane === null
@@ -814,7 +866,7 @@ async function stepPet($: EngineInterface) {
       petPane = null
     }
 
-    if (isGone || mood === 'asleep') {
+    if (isGone || isPetStill(pet, now)) {
       walking?.cancel()
       walking = null
     }
@@ -824,14 +876,13 @@ async function stepPet($: EngineInterface) {
 }
 
 // Has the pet move while it has something to show and a pane to show it in.
-function movePet($: EngineInterface) {
-  if (isAnimated && pet !== null && mood !== 'asleep' && petPane !== null && walking === null) {
+function movePet($: EngineInterface, now: number) {
+  if (isAnimated && pet !== null && !isPetStill(pet, now) && petPane !== null && walking === null) {
     walking = $.clock.every(PET_FRAME_MS, () => void stepPet($))
   }
 }
 
-// Tells the pet what the session is doing now. A turn that starts while one
-// runs is a subagent's, and the walk goes on.
+// Tells the pet what the session is doing now.
 async function petTo($: EngineInterface, next: Mood) {
   if (pet === null || mood === next) {
     return
@@ -844,7 +895,7 @@ async function petTo($: EngineInterface, next: Mood) {
   petFrom = petX
 
   if (isAnimated) {
-    movePet($)
+    movePet($, now)
   } else if (petPane !== null) {
     // A still pet changes only when its pane is drawn again.
     $.ui.invalidate('ui.render')
@@ -1023,7 +1074,10 @@ export const register: Register = (on, options) => {
     const rows = e.props.scroll.bodyRows
     const creature = PetRaster !== undefined && rows >= boardRows(shown) + 1 + PET_ROWS ? pet : null
     isSweating = isHot(shown.limits)
-    const frame = creature === null ? null : petNow(creature, await $.clock.now())
+    isUsedUp = isSpent(shown.limits)
+    const now = await $.clock.now()
+    restAfterHops(now)
+    const frame = creature === null ? null : petNow(creature, now)
 
     const board = (
       <Box flexDirection="column" paddingLeft={BOARD_GUTTER}>
@@ -1062,7 +1116,7 @@ export const register: Register = (on, options) => {
       petX = frame.x
     }
 
-    movePet($)
+    movePet($, now)
 
     return board
   })
@@ -1091,26 +1145,68 @@ export const register: Register = (on, options) => {
       $.clock.after(0, () => sweepBars($))
     }
 
-    $.clock.after(0, () => void petTo($, 'working'))
+    isTurning = true
+
+    // A turn that starts while one runs is a subagent's: the walk goes on, and
+    // a pet waiting on the person keeps waiting.
+    if (waitingOn === null) {
+      $.clock.after(0, () => void petTo($, 'working'))
+    }
 
     return next(e)
   })
 
-  on('tool.call', ($, e, next) => {
+  on('tool.call', async ($, e, next) => {
     // A question put to the person is no tool of the turn's, whoever asks it:
     // Claude, or a mod that holds a risky command until the person approves it.
     if (e.agentId === undefined && e.tool !== 'AskUserQuestion') {
       tools += 1
     }
 
-    return next(e)
+    const call: CallUnderWay = { tool: e.tool, input: e }
+    underWay.add(call)
+
+    try {
+      return await next(e)
+    } finally {
+      underWay.delete(call)
+
+      // The prompt it waited on is answered: the call ran, or was turned down.
+      if (call === waitingOn) {
+        waitingOn = null
+        $.clock.after(0, () => void petTo($, isTurning ? 'working' : 'asleep'))
+      }
+    }
   })
+
+  // A permission prompt or a question opens: the pet waits on the call it is
+  // about until that call is done. Nothing marks the moment the person answers
+  // where a mod can see it (the tool's row is redrawn running, but Clean View
+  // and Fold View draw that row without passing it on), so a long command the
+  // person allowed keeps the pet waiting until it ends.
+  on('classic.PermissionRequest', async ($, e, next) => {
+    const answer = await next(e)
+
+    // A hook beneath that decided it opens no prompt.
+    if (answer.decision === undefined) {
+      waitingOn = callAskedAbout(underWay, e.tool_name, e.tool_input) ?? waitingOn
+
+      if (waitingOn !== null) {
+        $.clock.after(0, () => void petTo($, 'waiting'))
+      }
+    }
+
+    return answer
+    // Should it fail, the prompt opens as it would without the pet.
+  }).catch(($, e, next) => (next.called ? {} : next(e)))
 
   on('turn.complete', async ($, e, next) => {
     if (e.agentId !== undefined) {
       return next(e)
     }
 
+    isTurning = false
+    waitingOn = null
     working?.cancel()
     working = null
 

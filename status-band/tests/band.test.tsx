@@ -2,7 +2,7 @@ import { expect, mock, test } from 'claude-code/testing'
 import type { Engine, MockClock } from 'claude-code/testing'
 import type { FsEntry, On, SessionUsage } from 'claude-code'
 
-import { CREATURES, HOPS_MS, petFrame } from '../hooks/pet'
+import { CREATURES, DIG_MS, HOPS_MS, petFrame } from '../hooks/pet'
 
 const MINUTE = 60_000
 const HOUR = 60 * MINUTE
@@ -87,6 +87,10 @@ const boot = (on: On, env: Record<string, string> = {}) => {
     store: {} as Record<string, unknown>,
     runs: [] as { argv: readonly string[]; env?: Record<string, string> }[],
     logs: [] as string[],
+    // What a Bash call waits on before it is done, as one the person must approve does.
+    held: Promise.resolve(),
+    // What the hooks beneath answer a permission request with: nothing, so a dialog opens.
+    permission: {} as Record<string, unknown>,
   }
   const clock = mock.clock(on, { now: NOW })
   mock.env(on, { USERPROFILE: HOME, OS: 'Windows_NT', ...env })
@@ -98,7 +102,14 @@ const boot = (on: On, env: Record<string, string> = {}) => {
   on('session.measure', ($, e) => ({ changed: e.changed }))
   on('turn.start', ($, e) => ({ turnId: e.turnId }))
   on('turn.complete', ($, e) => ({ text: e.answer }))
-  on('tool.call', () => ({ result: 'ok' }))
+  on('tool.call', async ($, e) => {
+    if (e.tool === 'Bash') {
+      await world.held
+    }
+
+    return { result: 'ok' }
+  })
+  on('classic.PermissionRequest', () => world.permission)
   on('session.usage', () => (world.isUsageDown ? { deny: 'usage is offline' } : { value: world.usage }))
   on('session.model', () => ({ value: world.model }))
   on('session.cwd', () => ({ value: CWD }))
@@ -1374,7 +1385,7 @@ const work = async ($: Engine, clock: MockClock, turnId = 't1') => {
   await clock.settle()
 }
 
-test('draws the pet asleep under the list of the pane, a row apart', async ($, on) => {
+test('draws the pet asleep under the list of the pane, a row apart, dug in long since', async ($, on) => {
   const { world, clock } = boot(on)
   world.files = STILL_PEER()
   await start($, clock)
@@ -1385,7 +1396,7 @@ test('draws the pet asleep under the list of the pane, a row apart', async ($, o
     key: 'pet',
     columns: 24,
     rows: 8,
-    cells: petFrame(CRAB, 'asleep', 0, AT_HOME).cells,
+    cells: petFrame(CRAB, 'asleep', DIG_MS, AT_HOME).cells,
   })
 })
 
@@ -1493,7 +1504,7 @@ test("keeps the pet's walk going when a subagent's turn starts", async ($, on) =
   expect(petBlits(world).at(-1)?.cells).toBe(petFrame(CRAB, 'working', PET * 25, AT_HOME).cells)
 })
 
-test('hops when the turn ends, then sleeps where it stopped and is painted no more', async ($, on) => {
+test('hops when the turn ends, digs in where it stopped, and is painted no more once it sleeps', async ($, on) => {
   const { world, clock } = boot(on)
   world.files = STILL_PEER()
   await start($, clock)
@@ -1511,6 +1522,10 @@ test('hops when the turn ends, then sleeps where it stopped and is painted no mo
   await clock.advance(HOPS_MS)
 
   expect(petBlits(world).at(-1)?.cells).toBe(petFrame(CRAB, 'asleep', 0, there).cells)
+
+  await clock.advance(DIG_MS)
+
+  expect(petBlits(world).at(-1)?.cells).toBe(petFrame(CRAB, 'asleep', DIG_MS, there).cells)
 
   const painted = petBlits(world).length
   await clock.advance(10_000)
@@ -1599,9 +1614,131 @@ test(
     await $.turn.complete({ ...TURN, durationMs: 800 })
     await clock.settle()
 
-    expect((await petIn($))?.raster.props?.cells).toBe(petFrame(CRAB, 'asleep', 0, AT_HOME).cells)
+    // Without animation there is no digging to show: it lies dug in at once.
+    expect((await petIn($))?.raster.props?.cells).toBe(petFrame(CRAB, 'asleep', DIG_MS, AT_HOME).cells)
   },
 )
+
+// Starts a Bash call that waits for the person's answer, and opens its prompt.
+const askPerson = async ($: Engine, clock: MockClock, world: { held: Promise<void> }) => {
+  let answer = () => {}
+  world.held = new Promise<void>(done => {
+    answer = done
+  })
+  const call = $.tool.call({ tool: 'Bash', command: 'rm -r build' })
+  await clock.settle()
+  await $.classic.PermissionRequest({ tool_name: 'Bash', tool_input: { command: 'rm -r build' } })
+  await clock.settle()
+
+  return async () => {
+    answer()
+    await call
+    await clock.settle()
+  }
+}
+
+// Six frames of walking are a step, which took it a pixel on from home.
+const A_STEP_ON = { isHot: false, x: 5 }
+
+test('waves the pet under a question mark while a prompt waits for the person, and walks on once it is answered', async ($, on) => {
+  const { world, clock } = boot(on)
+  world.files = STILL_PEER()
+  await start($, clock)
+  await petIn($)
+  await work($, clock)
+  await clock.advance(PET * 6)
+  const answer = await askPerson($, clock, world)
+  await clock.advance(PET)
+
+  expect(petBlits(world).at(-1)?.cells).toBe(petFrame(CRAB, 'waiting', PET, A_STEP_ON).cells)
+
+  await clock.advance(PET * 12)
+
+  // It goes on waving while nobody answers.
+  expect(petBlits(world).at(-1)?.cells).toBe(petFrame(CRAB, 'waiting', PET * 13, A_STEP_ON).cells)
+
+  await answer()
+  await clock.advance(PET)
+
+  expect(petBlits(world).at(-1)?.cells).toBe(petFrame(CRAB, 'working', PET, A_STEP_ON).cells)
+})
+
+test('keeps the pet waiting when some other call ends before the prompt is answered', async ($, on) => {
+  const { world, clock } = boot(on)
+  world.files = STILL_PEER()
+  await start($, clock)
+  await petIn($)
+  await work($, clock)
+  await clock.advance(PET * 6)
+  await askPerson($, clock, world)
+  await $.tool.call({ tool: 'Read', file_path: 'notes.md' })
+  await clock.settle()
+  await clock.advance(PET)
+
+  expect(petBlits(world).at(-1)?.cells).toBe(petFrame(CRAB, 'waiting', PET, A_STEP_ON).cells)
+})
+
+test("keeps the pet waiting when a subagent's turn starts", async ($, on) => {
+  const { world, clock } = boot(on)
+  world.files = STILL_PEER()
+  await start($, clock)
+  await petIn($)
+  await work($, clock)
+  await clock.advance(PET * 6)
+  await askPerson($, clock, world)
+  await work($, clock, 't2')
+  await clock.advance(PET)
+
+  expect(petBlits(world).at(-1)?.cells).toBe(petFrame(CRAB, 'waiting', PET, A_STEP_ON).cells)
+})
+
+test('hops when the turn ends while a prompt waits, as when the person turns it down', async ($, on) => {
+  const { world, clock } = boot(on)
+  world.files = STILL_PEER()
+  await start($, clock)
+  await petIn($)
+  await work($, clock)
+  await clock.advance(PET * 6)
+  await askPerson($, clock, world)
+  await $.turn.complete({ ...TURN, durationMs: 400 })
+  await clock.settle()
+  await clock.advance(PET)
+
+  expect(petBlits(world).at(-1)?.cells).toBe(petFrame(CRAB, 'done', PET, A_STEP_ON).cells)
+})
+
+test('does not wait when a hook beneath answered the permission request, so no prompt opened', async ($, on) => {
+  const { world, clock } = boot(on)
+  world.files = STILL_PEER()
+  world.permission = { decision: { behavior: 'allow' } }
+  await start($, clock)
+  await petIn($)
+  await work($, clock)
+  await clock.advance(PET * 6)
+  await askPerson($, clock, world)
+  await clock.advance(PET)
+
+  expect(petBlits(world).at(-1)?.cells).toBe(petFrame(CRAB, 'working', PET * 7, AT_HOME).cells)
+})
+
+test('lays the pet on its back once the five-hour limit is spent, and paints it no more', async ($, on) => {
+  const { world, clock } = boot(on)
+  world.files = STILL_PEER()
+  world.usage = {
+    ...world.usage,
+    rateLimits: world.usage.rateLimits.map(limit => (limit.kind === 'five_hour' ? { ...limit, percentUsed: 100 } : limit)),
+  }
+  await start($, clock)
+  const spent = { isHot: true, isSpent: true, x: 4 }
+
+  expect((await petIn($))?.raster.props?.cells).toBe(petFrame(CRAB, 'asleep', 0, spent).cells)
+
+  await work($, clock)
+  await clock.advance(PET * 10)
+
+  expect(petBlits(world)).toEqual([])
+  expect((await petIn($))?.raster.props?.cells).toBe(petFrame(CRAB, 'working', 0, spent).cells)
+})
 
 // ── The Status tab ──────────────────────────────────────────────────────────
 
