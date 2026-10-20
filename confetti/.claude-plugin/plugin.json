@@ -1,0 +1,8 @@
+{
+  "name": "confetti",
+  "version": "0.1.0",
+  "description": "A second and a half of colored pixel confetti above the checklist each time a Clean View job ends as All done, and on /confetti",
+  "author": { "name": "Broo37" },
+  "types": "./types/index.d.ts",
+  "dependencies": ["clean-view"]
+}

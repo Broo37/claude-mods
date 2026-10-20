@@ -1,9 +1,10 @@
 # claude-mods
 
-Mods for [Claude Code](https://claude.com/claude-code): plugins of function hooks that change how a session looks and behaves. There are nine, and each one installs on its own. Install the ones you want, then find each one's card in the [cheat sheet](#cheat-sheet).
+Mods for [Claude Code](https://claude.com/claude-code): plugins of function hooks that change how a session looks and behaves. There are ten, and each one installs on its own. Install the ones you want, then find each one's card in the [cheat sheet](#cheat-sheet).
 
 | Mod | In one line |
 | --- | --- |
+| [`confetti`](#-confetti) | A burst of pixel confetti when a job ends as All done |
 | [`clean-view`](#-clean-view) | Hides Claude's tool calls and shows its plan as a checklist |
 | [`fold-view`](#-fold-view) | Folds every tool call to one line a click opens |
 | [`status-band`](#-status-band) | Model, git, cost and your usage limits as bars, plus a pet |
@@ -34,13 +35,20 @@ claude --plugin-dir path/to/claude-mods/clean-view
 
 To load several from folders, list them in `CLAUDE_CODE_PLUGIN_DIRS` (under `env` in `settings.json`, `;` between them on Windows) in the order of the table above. The first folder is the outermost hook, and the order matters:
 
-- `clean-view` comes first: it wraps the band `status-band` draws and the pane `tool-waterfall` draws, and its hidden rows have to win over the badges of `transcript-makeover`.
+- `confetti` comes first, even before `clean-view`: its burst goes on top of the checklist Clean View draws above the prompt. Listed after it, Clean View would take the burst for another mod's band and make a tab of it.
+- `clean-view` comes next: it wraps the band `status-band` draws and the pane `tool-waterfall` draws, and its hidden rows have to win over the badges of `transcript-makeover`.
 - `fold-view` comes right after it: it folds the rows Clean View lets through while off, and its folded lines have to win over the badges of `transcript-makeover` too.
 - `status-band`, `transcript-makeover` and `tool-waterfall` come before `risky-hold`: a command it refuses never reaches a mod listed after it, so the mods that count and time calls would miss it.
 
 ## Cheat sheet
 
 Each card covers one mod: what it does, what to type and what you can set. Settings are rows in `/config`. To turn a mod off for good, disable or uninstall it in `/plugin`.
+
+### 🎉 `confetti`
+
+- **What:** a second and a half of colored pixel confetti right above the checklist, each time a Clean View job ends as **All done**. When a job is stopped, stuck or waiting for you, nothing plays.
+- **Type:** `/confetti` plays it whenever you like.
+- **Works with:** it needs `clean-view`, since it plays on Clean View's All done, so with Clean View off only `/confetti` plays it.
 
 ### 🧹 `clean-view`
 

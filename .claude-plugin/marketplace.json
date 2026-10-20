@@ -4,6 +4,11 @@
   "owner": { "name": "Broo37" },
   "plugins": [
     {
+      "name": "confetti",
+      "source": "./confetti",
+      "description": "A second and a half of colored pixel confetti above the checklist each time a Clean View job ends as All done, and on /confetti"
+    },
+    {
       "name": "clean-view",
       "source": "./clean-view",
       "description": "Hides tool calls, diffs and command output while Claude works, and shows the plan as a checklist above the prompt"
