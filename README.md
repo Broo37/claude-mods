@@ -1,18 +1,18 @@
 # claude-mods
 
-Mods for [Claude Code](https://claude.com/claude-code): plugins of function hooks that change how a session looks and behaves.
+Mods for [Claude Code](https://claude.com/claude-code): plugins of function hooks that change how a session looks and behaves. There are nine, and each one installs on its own. Install the ones you want, then find each one's card in the [cheat sheet](#cheat-sheet).
 
-| Mod | What it does | Yours to set |
-| --- | --- | --- |
-| [`clean-view`](#clean-view) | Hides tool calls, diffs and command output while Claude works, and shows the plan as a checklist above the prompt, where a click opens a step to what Claude did in it, and as a plain list in a tab of the side pane | `/simple on`, `/simple off` |
-| [`fold-view`](#fold-view) | While Clean View is off, folds every tool call in the transcript to one line in plain words with a check or a cross, which a click opens to its full output or diff | |
-| `status-band` | The Awesome Statusline layout in a Status tab of the side pane, its 5H, 7D, Codex and context bars standing upright side by side, with model, git, cost and reset times; a band by the prompt where the tab cannot show; a pet under the list of sessions | `tab`, `size`, `animate`, `position`, `pet`; `/band` brings the tab forward |
-| `transcript-makeover` | Ends every tool row with a check or a red cross and how long the call took, and every turn with a receipt: time, tools, failures, cost and share of the five-hour limit | |
-| `tool-waterfall` | A pane that charts the tool calls of the turn as bars along its time, like a browser's network tab | `/waterfall` opens and closes it |
-| `risky-hold` | Holds a destructive shell command (recursive delete, `git reset --hard`, force push, disk or database wipe) until you say run it | |
-| `message-times` | Shows when each prompt you sent was sent, at the right of its row in the transcript | |
-| `spinner` | Draws the line that moves while Claude works as an equalizer, a rainbow wave, a comet, a game of pong or a face eating a bar of blocks, with wording of your own | `style`, `format` |
-| `rainbow-prompt` | Colors the prompt box as you type: ticket ids, paths, links, rainbow words, and a red warning on anything that looks like a secret | `words` |
+| Mod | In one line |
+| --- | --- |
+| [`clean-view`](#-clean-view) | Hides Claude's tool calls and shows its plan as a checklist |
+| [`fold-view`](#-fold-view) | Folds every tool call to one line a click opens |
+| [`status-band`](#-status-band) | Model, git, cost and your usage limits as bars, plus a pet |
+| [`transcript-makeover`](#-transcript-makeover) | A check or a cross and a time on every tool row, a receipt after every turn |
+| [`tool-waterfall`](#-tool-waterfall) | A chart of the turn's tool calls over time |
+| [`risky-hold`](#-risky-hold) | Asks you before a destructive shell command runs |
+| [`message-times`](#-message-times) | When you sent each prompt |
+| [`spinner`](#-spinner) | The working line as an animation, with your own wording |
+| [`rainbow-prompt`](#-rainbow-prompt) | Colors the prompt as you type, and secrets in red |
 
 ## Install
 
@@ -32,11 +32,66 @@ claude --plugin-dir path/to/claude-mods/clean-view
 
 ### Several at once
 
-To load several from folders, list them in `CLAUDE_CODE_PLUGIN_DIRS` (under `env` in `settings.json`, `;` between them on Windows) in the order of the table. The first folder is the outermost hook, and the order matters:
+To load several from folders, list them in `CLAUDE_CODE_PLUGIN_DIRS` (under `env` in `settings.json`, `;` between them on Windows) in the order of the table above. The first folder is the outermost hook, and the order matters:
 
 - `clean-view` comes first: it wraps the band `status-band` draws and the pane `tool-waterfall` draws, and its hidden rows have to win over the badges of `transcript-makeover`.
 - `fold-view` comes right after it: it folds the rows Clean View lets through while off, and its folded lines have to win over the badges of `transcript-makeover` too.
 - `status-band`, `transcript-makeover` and `tool-waterfall` come before `risky-hold`: a command it refuses never reaches a mod listed after it, so the mods that count and time calls would miss it.
+
+## Cheat sheet
+
+Each card covers one mod: what it does, what to type and what you can set. Settings are rows in `/config`. To turn a mod off for good, disable or uninstall it in `/plugin`.
+
+### 🧹 `clean-view`
+
+- **What:** hides Claude's tool calls, diffs and command output, and shows the plan as a checklist above the prompt.
+- **Type:** `/simple off` to see everything again, `/simple on` to hide it again, or `/simple` alone to flip it. The `[ ● Clean View: ON ]` button above the prompt does the same.
+- **Click:** a step with a `▸` opens to what Claude did in it.
+- **Good to know:** your choice is remembered for the next session. [More about Clean View](#clean-view).
+
+### 📂 `fold-view`
+
+- **What:** each tool call becomes one line in plain words, like `▸ ✓ Ran: List the files in the folder · 4s`.
+- **Click:** a line opens to its full output or diff. A second click folds it again.
+- **Works with:** it shows while Clean View is off. Without Clean View installed, it is always on. [More about Fold View](#fold-view).
+
+### 📊 `status-band`
+
+- **What:** a `Status` tab in the side pane, with your 5H, 7D, Codex and context bars standing side by side, plus model, git, cost and reset times. Where the tab can't show, it becomes a band by the prompt.
+- **Type:** `/band` brings the Status tab to the front. `/sessions` shows your other Claude Code sessions in a pane, with a pet under the list.
+- **The pet:** it sleeps while you're idle, walks while Claude works, hops when a turn ends, and stands under a `?` while Claude waits for you. The crab is Clawd.
+- **Set:** `tab` (on), `size` (`xsmall` to `xlarge`), `animate` (on), `position` (`above` or `below` the prompt), `pet` (`crab`, `cat`, `ghost`, `smiley` or `off`).
+
+### 🧾 `transcript-makeover`
+
+- **What:** every tool row ends with how long it took, `✓ 2.2s`, or a red `✗` if it failed. Every turn ends with a receipt: `1m 4s · 6 tools · 1 failed · $ 0.42 · 5H +2.5% · done 14:09`.
+- **Type:** nothing, it works by itself.
+
+### 🌊 `tool-waterfall`
+
+- **What:** a chart of the turn's tool calls as bars over time, like the network tab in a browser.
+- **Type:** `/waterfall` opens it, and `/waterfall` again closes it. If you leave it open, it opens again in your next session.
+
+### 🛑 `risky-hold`
+
+- **What:** before Claude runs a destructive shell command (a recursive delete, `git reset --hard`, a force push, a disk or database wipe), it asks you: **Run it** or **Block it**.
+- **Type:** nothing, just answer when it asks. Where nobody can answer (`claude -p`), such a command is refused.
+- **Good to know:** deletes inside a temp folder or a build folder (`node_modules`, `dist`, `build` and the like) go through without a question. It reads shell commands only, so a script Claude writes and then runs is not checked.
+
+### 🕒 `message-times`
+
+- **What:** the time you sent each prompt, at the right of its row: `14:05`, or `6 Oct 23:59` for a prompt from another day.
+- **Type:** nothing, it works by itself.
+
+### 🌀 `spinner`
+
+- **What:** the line that moves while Claude works becomes an animation, with your own wording.
+- **Set:** `style`: `equalizer` (the default), `rainbow`, `comet`, `pong` or `smiley`. `format`: the wording, where `{}` stands for what Claude is doing, as in `Claude is {}...`.
+
+### 🌈 `rainbow-prompt`
+
+- **What:** colors the prompt box as you type: ticket ids, paths, links and your rainbow words. Anything that looks like a secret, such as a key or a token, turns red before you send it.
+- **Set:** `words`: the words painted in rainbow, with commas between them (`ultrathink` by default).
 
 ## Clean View
 
