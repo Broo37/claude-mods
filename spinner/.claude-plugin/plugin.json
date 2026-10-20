@@ -1,6 +1,6 @@
 {
   "name": "spinner",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Draws the line that moves while Claude works as an equalizer, a rainbow wave, a comet, a game of pong or a face eating a bar of blocks, with wording of your own",
   "author": { "name": "Broo37" },
   "userConfig": {
@@ -15,7 +15,7 @@
       "type": "string",
       "title": "Wording",
       "description": "What the line says while Claude works; {} stands for the verb",
-      "default": "Iwan will get {}..."
+      "default": "{}..."
     }
   }
 }

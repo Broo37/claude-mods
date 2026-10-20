@@ -86,7 +86,7 @@ Each card covers one mod: what it does, what to type and what you can set. Setti
 ### 🌀 `spinner`
 
 - **What:** the line that moves while Claude works becomes an animation, with your own wording.
-- **Set:** `style`: `equalizer` (the default), `rainbow`, `comet`, `pong` or `smiley`. `format`: the wording, where `{}` stands for what Claude is doing, as in `Claude is {}...`.
+- **Set:** `style`: `equalizer` (the default), `rainbow`, `comet`, `pong` or `smiley`. `format`: the wording, where `{}` stands for what Claude is doing. By default it is `{}...`, just the word (`Pondering...`). Set `Claude is {}...` and it says `Claude is Pondering...`.
 
 ### 🌈 `rainbow-prompt`
 

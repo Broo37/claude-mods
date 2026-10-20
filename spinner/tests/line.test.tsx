@@ -137,7 +137,7 @@ test('draws the strip, the wording and the time in place of the line', async ($,
   expect(strip?.props?.columns).toBe(12)
   expect(strip?.props?.rows).toBe(1)
   expect(strip?.props?.cells).toBe(barsAt(0))
-  expect(words?.children).toEqual([' Iwan will get Baking...'])
+  expect(words?.children).toEqual([' Baking...'])
   expect(words?.props?.color).toBe('claude')
   expect(time?.children).toEqual([' (0s)'])
   expect(time?.props?.dimColor).toBe(true)

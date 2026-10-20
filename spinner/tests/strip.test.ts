@@ -248,7 +248,7 @@ test('packs a frame as raster cells, each its character in the given color on th
 })
 
 test('puts the verb where the wording has {}', () => {
-  expect(saidOf('Iwan will get {}...', { word: 'Baking', message: null, suffix: '…' })).toBe('Iwan will get Baking...')
+  expect(saidOf('Claude will get {}...', { word: 'Baking', message: null, suffix: '…' })).toBe('Claude will get Baking...')
 })
 
 test('says a wording without {} as it is', () => {
@@ -256,7 +256,7 @@ test('says a wording without {} as it is', () => {
 })
 
 test('says a message that overrides the verb, with the mark that the turn goes on', () => {
-  expect(saidOf('Iwan will get {}...', { word: 'Baking', message: 'Compacting conversation', suffix: '…' })).toBe(
+  expect(saidOf('Claude will get {}...', { word: 'Baking', message: 'Compacting conversation', suffix: '…' })).toBe(
     'Compacting conversation…',
   )
 })

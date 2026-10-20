@@ -13,7 +13,7 @@ let look = lookOf(undefined)
 const SLACK_MS = 15
 
 // What the line says when the person set no wording of their own.
-const WORDING = 'Iwan will get {}...'
+const WORDING = '{}...'
 
 let wording = WORDING
 
