@@ -120,7 +120,9 @@ const fitted = (label: string, width: number) => cut(label, width).padEnd(width)
 // The lines of the chart for a pane of that many columns and rows: a heading,
 // the span of time, and a bar a call. `elapsed` is how far into the turn it is
 // now, which is what a turn that still runs is charted against.
-export const linesOf = (turn: Turn | null, elapsed: number, columns: number, rows: number): Run[][] => {
+// `nameColor` is the ink a call's tool name is drawn in, where it is not the
+// tool's own: the Deck keeps its names quiet and lets the bars carry the color.
+export const linesOf = (turn: Turn | null, elapsed: number, columns: number, rows: number, nameColor?: string): Run[][] => {
   if (turn === null) {
     return [[{ text: 'No turn yet. Tool calls show here as Claude works.', isDim: true }]]
   }
@@ -169,7 +171,7 @@ export const linesOf = (turn: Turn | null, elapsed: number, columns: number, row
       const to = Math.min(width, Math.max(from + 1, Math.ceil((until / total) * width)))
       const color = call.isError ? 'error' : colorOf(call.tool)
       const took = tookOf(until - call.start)
-      const name: Run = { text: nameOf(call.tool).padEnd(NAME), color: colorOf(call.tool) }
+      const name: Run = { text: nameOf(call.tool).padEnd(NAME), color: nameColor ?? colorOf(call.tool) }
       const bar: Run[] = [
         ...(from > 0 ? [{ text: ' '.repeat(from) }] : []),
         { text: '█'.repeat(to - from), color },

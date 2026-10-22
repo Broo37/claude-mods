@@ -23,14 +23,22 @@ test('lends no rows before any turn, so the Deck hides the panel', () => {
   expect(timelinePanelOf(null, 0, 43, 10).rows).toEqual([])
 })
 
-test('lends no rows for a turn with no calls yet', () => {
-  expect(timelinePanelOf({ calls: [], lasted: null }, 3000, 43, 10).rows).toEqual([])
+test('shows a running turn from its start, saying no tool has been called yet', () => {
+  const panel = timelinePanelOf({ calls: [], lasted: null }, 3000, 43, 10)
+
+  expect(panel).toMatchObject({ title: 'this turn', right: '3s running', isLive: true })
+  expect(plain(panel.rows)).toEqual(['no tool calls yet'])
+  expect(panel.rows[0]?.[0]?.color).toBe('inactive')
+})
+
+test('lends no rows for an ended turn that called no tool', () => {
+  expect(timelinePanelOf({ calls: [], lasted: 3000 }, 0, 43, 10).rows).toEqual([])
 })
 
 test('titles a running turn this turn, says how far it has come at its right, and moves on its own', () => {
   const panel = timelinePanelOf(RUNNING, 41_000, 43, 10)
 
-  expect(panel).toMatchObject({ id: 'timeline', title: 'this turn', right: '41s… · 2 tools', isLive: true })
+  expect(panel).toMatchObject({ id: 'timeline', title: 'this turn', right: '41s running · 2 tools', isLive: true })
   expect(panel.label).toEqual([])
 })
 
@@ -38,8 +46,17 @@ test('titles an ended turn last turn, with its failures at its right, and keeps 
   expect(timelinePanelOf(ENDED, 0, 43, 10)).toMatchObject({ title: 'last turn', right: '41s · 2 tools · 1 failed', isLive: false })
 })
 
-test('lends the chart without its heading', () => {
-  expect(timelinePanelOf(ENDED, 0, 43, 10).rows).toEqual(linesOf(ENDED, 0, 43, 11).slice(1))
+test('lends the chart without its heading, the tool names in the quiet ink', () => {
+  expect(timelinePanelOf(ENDED, 0, 43, 10).rows).toEqual(linesOf(ENDED, 0, 43, 11, 'inactive').slice(1))
+})
+
+test('draws a tool name quietly in the Deck and keeps its color on the bar', () => {
+  // At 43 columns a call takes two rows: what it was, then its bar.
+  const [, read, bar] = timelinePanelOf(ENDED, 0, 43, 10).rows
+
+  expect(read?.[0]?.text.trim()).toBe('Read')
+  expect(read?.[0]?.color).toBe('inactive')
+  expect(bar?.find(run => run.text.startsWith('█'))?.color).toBe('suggestion')
 })
 
 test('keeps within the rows asked for, the oldest calls under +N earlier', () => {
@@ -51,6 +68,6 @@ test('keeps within the rows asked for, the oldest calls under +N earlier', () =>
 })
 
 test('sums the turn up in one line', () => {
-  expect(plain([timelinePanelOf(RUNNING, 41_000, 43, 10).summary ?? []])).toEqual(['turn 41s… · 2 tools'])
+  expect(plain([timelinePanelOf(RUNNING, 41_000, 43, 10).summary ?? []])).toEqual(['turn 41s running · 2 tools'])
   expect(timelinePanelOf(null, 0, 43, 10).summary).toEqual([])
 })
