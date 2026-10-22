@@ -96,7 +96,7 @@ Each card covers one mod: what it does, what to type and what you can set. Setti
 
 ### 🧾 `transcript-makeover`
 
-- **What:** every tool row ends with how long it took, `✓ 2.2s`, or a red `✗` if it failed. Every turn ends with a receipt: `1m 4s · 6 tools · 1 failed · $ 0.42 · 5H +2.5% · done 14:09`.
+- **What:** every tool row ends with how long it took, `✓ 2.2s`, or a red `✗` if it failed. Every turn ends with a receipt: `1m 4s · 6 tools · 1 failed · $ 0.42 · 5H +2.5% · done 14:09`, the turn a background helper's report wakes included. A helper's own calls and spending stay out of it.
 - **Type:** nothing, it works by itself.
 
 ### 🌊 `tool-waterfall`

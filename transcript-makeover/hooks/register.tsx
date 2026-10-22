@@ -22,6 +22,12 @@ const waiting = new Map<number, Receipt[]>()
 
 const receipts = new Map<string, Receipt>()
 
+// How soon after its turn ended a line that matches no receipt by its time may
+// still take that turn's receipt. After a background helper reports back, Claude
+// Code times the line of the turn the report woke from the prompt, not from the
+// turn's start, so its time is longer than the turn's.
+const JUST_NOW_MS = 3000
+
 // Keeps the newest entries of a map that would otherwise grow with the session.
 function trim(map: Map<unknown, unknown>) {
   for (const key of map.keys()) {
@@ -58,6 +64,32 @@ async function begin($: EngineInterface) {
   mine.began = await reading($)
 }
 
+// The receipt a line stands for: the one its turn's time names, else the one a
+// turn wrote just now, no longer than the line, which counts from the prompt.
+function claim(durationMs: number, now: number): Receipt | undefined {
+  const exact = waiting.get(durationMs) ?? []
+  const pick =
+    exact[0] ??
+    [...waiting.values()]
+      .flat()
+      .filter(receipt => receipt.durationMs <= durationMs && now - receipt.doneAt <= JUST_NOW_MS)
+      .sort((a, b) => b.doneAt - a.doneAt)[0]
+
+  if (pick === undefined) {
+    return undefined
+  }
+
+  const queue = (waiting.get(pick.durationMs) ?? []).filter(receipt => receipt !== pick)
+
+  if (queue.length === 0) {
+    waiting.delete(pick.durationMs)
+  } else {
+    waiting.set(pick.durationMs, queue)
+  }
+
+  return pick
+}
+
 const added = (from: number | null | undefined, to: number | null | undefined) =>
   from === null || from === undefined || to === null || to === undefined ? null : Math.max(0, to - from)
 
@@ -82,8 +114,11 @@ async function settle($: EngineInterface, durationMs: number) {
 }
 
 export const register: Register = on => {
+  // A helper's turn is no main turn, even one that starts after the main turn ended.
   on('turn.start', async ($, e, next) => {
-    await begin($)
+    if (e.agentId === undefined) {
+      await begin($)
+    }
 
     return next(e)
   })
@@ -144,16 +179,11 @@ export const register: Register = on => {
     let receipt = receipts.get(e.requestId)
 
     if (receipt === undefined) {
-      const queue = waiting.get(e.props.durationMs) ?? []
-      receipt = queue.shift()
+      receipt = claim(e.props.durationMs, await $.clock.now())
 
       // A turn this mod did not see end keeps the line Claude Code draws.
       if (receipt === undefined) {
         return next(e)
-      }
-
-      if (queue.length === 0) {
-        waiting.delete(e.props.durationMs)
       }
 
       receipts.set(e.requestId, receipt)

@@ -344,3 +344,53 @@ test('writes a receipt for a turn that began before the mod was there, without w
 
   expect(textsOf(await lineOf($, 'd1', 3000))).toEqual(['✻ ', '3s', ' · ', 'done 08:45'])
 })
+
+// ── After a background helper reports back ──────────────────────────────────
+
+test("takes the receipt of the turn that just ended when its line counts from the prompt, as after a helper's report", async ($, on) => {
+  const { world, clock } = boot(on)
+  await $.turn.start({ text: 'hi', turnId: 't1' })
+  await clock.settle()
+  await finish($, clock, 8133)
+  await lineOf($, 'd1', 8133)
+  await clock.advance(12_000)
+  await $.turn.start({ text: '<task-notification>', turnId: 't2' })
+  await clock.settle()
+  await call($, world, 'c1', 1000)
+  await finish($, clock, 4920, { turnId: 't2' })
+  const tree = await lineOf($, 'd2', 25_292)
+
+  expect(untagged(tree)).not.toEqual(ENGINE_LINE(25_292))
+  expect(textsOf(tree)[3]).toBe('1 tool')
+})
+
+test('leaves a line the engine draws long after a turn ended as it is, when its time matches no receipt', async ($, on) => {
+  const { clock } = boot(on)
+  await $.turn.start({ text: 'hi', turnId: 't1' })
+  await clock.settle()
+  await finish($, clock, 4920)
+  await clock.advance(MINUTE)
+
+  expect(untagged(await lineOf($, 'old', 25_292))).toEqual(ENGINE_LINE(25_292))
+})
+
+test("does not take a helper's turn that starts after the main turn ended for a main turn", async ($, on) => {
+  const { world, clock } = boot(on)
+  await $.turn.start({ text: 'hi', turnId: 't1' })
+  await clock.settle()
+  await finish($, clock, 8000)
+  await lineOf($, 'd1', 8000)
+  // A helper still at work once the main turn has ended, spending as it goes.
+  world.usage = usage(1, 40)
+  await $.turn.start({ text: 'look', turnId: 'h1', agentId: 'a1' })
+  await clock.settle()
+  world.usage = usage(2, 45)
+  await finish($, clock, 5000, { turnId: 'h1', agentId: 'a1' })
+  // Its report wakes the main loop for one more turn.
+  await $.turn.start({ text: '<task-notification>', turnId: 't2' })
+  await clock.settle()
+  world.usage = usage(2.5, 46)
+  await finish($, clock, 3000, { turnId: 't2' })
+
+  expect(textsOf(await lineOf($, 'd2', 3000))[3]).toBe('$ 0.50')
+})
