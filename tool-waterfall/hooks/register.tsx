@@ -1,7 +1,11 @@
-import type { Register, Timer } from 'claude-code'
+import { atom, read, update } from 'claude-code'
+import type { EngineInterface, Register, Timer } from 'claude-code'
+
+import type { ToolWaterfallHost, ToolWaterfallPanel } from '../types'
 
 import { labelOf, linesOf } from './chart'
 import type { Call, Run } from './chart'
+import { timelinePanelOf } from './panel'
 
 // How far the chart stands off the pane's left edge: as far as the lines of the
 // Sessions pane do.
@@ -33,6 +37,22 @@ let ticking: Timer | null = null
 
 const isRunning = (charted: Charted | null): charted is Charted => charted !== null && charted.lasted === null
 
+// The mod that hosts the chart (the Deck), if one does: then the pane stands
+// aside. Kept in the session's state, which outlasts a reload, and here, which
+// outlasts a /clear that empties the state.
+const hostAtom = atom({ plugin: 'tool-waterfall', key: 'host' } as const, null as ToolWaterfallHost | null)
+
+let hosted: ToolWaterfallHost | null = null
+
+async function hostOf($: EngineInterface) {
+  hosted ??= await read($, hostAtom)
+
+  return hosted
+}
+
+// The panel a lent method answers where no hook of this mod does: no rows, so a host hides it.
+const UNLENT: ToolWaterfallPanel = { id: 'timeline', title: 'timeline', right: '', label: [], rows: [], isLive: false }
+
 const lookOf = (run: Run) => ({
   wrap: 'truncate-end' as const,
   ...(run.color !== undefined && { color: run.color }),
@@ -41,6 +61,34 @@ const lookOf = (run: Run) => ({
 })
 
 export const register: Register = on => {
+  // What the Waterfall lends another mod, the Deck: the chart as a panel, and a
+  // way to host it. The methods here stand at the bottom of their events; the
+  // hooks below answer them, holding `$` as a method cannot.
+  on('engine.create', async ($, e, next) => {
+    const built = await next(e)
+
+    return { ...built, toolWaterfall: { panel: async () => UNLENT, host: async () => false } }
+  })
+
+  on('toolWaterfall.panel', async ($, e) => {
+    const charted = turn
+    const elapsed = isRunning(charted) ? (await $.clock.now()) - charted.startedAt : 0
+
+    return { value: timelinePanelOf(charted, elapsed, e.columns, e.rows) }
+  })
+
+  // Hosted, the pane closes and stays closed: the chart is the host's panel.
+  on('toolWaterfall.host', async ($, e) => {
+    hosted = { by: e.by, isDocked: e.isDocked }
+    await update($, hostAtom, () => hosted)
+
+    if ((await $.ui.panes()).some(pane => pane.id === PANE.id)) {
+      await $.ui.close({ id: PANE.id })
+    }
+
+    return { value: true }
+  })
+
   on('session.start', async ($, e, next) => {
     await $.command.register({
       name: 'waterfall',
@@ -51,7 +99,7 @@ export const register: Register = on => {
     // opened here, first of all, because the pane opened last is the tab in
     // front: the Sessions pane, which opens once it has looked around, is.
     try {
-      if ((await $.store.get(KEPT)) === true) {
+      if ((await hostOf($)) === null && (await $.store.get(KEPT)) === true) {
         await $.ui.open(PANE)
       }
     } catch {
@@ -62,6 +110,10 @@ export const register: Register = on => {
   })
 
   on('command.run', { command: 'waterfall' }, async $ => {
+    if ((await hostOf($)) !== null) {
+      return { text: 'Waterfall is in the Deck: /deck timeline' }
+    }
+
     const mine = (await $.ui.panes()).find(pane => pane.id === PANE.id)
 
     if (mine?.isShown === true) {

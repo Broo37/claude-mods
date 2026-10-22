@@ -1,5 +1,5 @@
 import { expect, mock, test } from 'claude-code/testing'
-import type { Engine, MockClock } from 'claude-code/testing'
+import type { Engine, MockClock, Plugin } from 'claude-code/testing'
 import type { On, ToolCallResult } from 'claude-code'
 
 import { linesOf } from '../hooks/chart'
@@ -425,4 +425,71 @@ test('charts the calls of a turn that began before the mod was there', async ($,
   await call($, world, { tool: 'Bash', command: 'ls', tool_use_id: 'c1' }, 1000)
 
   expect(linesIn(await paneOf($))[0]).toBe('Turn 1s… · 1 tool')
+})
+
+// ── Lent to the Deck ────────────────────────────────────────────────────────
+
+// A stand-in for the Deck: it asks for the timeline on a command, and hosts
+// the Waterfall on another, answering with what it got back.
+const DECK: Plugin = {
+  name: 'deck',
+  register(on) {
+    on('command.run', { command: 'deck-timeline' }, async $ => ({
+      text: JSON.stringify(await $.toolWaterfall.panel({ id: 'timeline', columns: 43, rows: 10 })),
+    }))
+    on('command.run', { command: 'deck-host' }, async ($, e) => ({
+      text: String(await $.toolWaterfall.host({ by: 'deck', isDocked: e.args === 'docked' })),
+    }))
+  },
+}
+
+const deck = async ($: Engine, clock: MockClock, command: string, args = '') => {
+  const answer = (await $.command.run({ command, args, origin: { kind: 'composer' }, presentation: { isFullscreen: true, columns: 150 } })) as {
+    text: string
+  }
+  await clock.settle()
+
+  return answer
+}
+
+test('lends the timeline of the turn through $.toolWaterfall.panel', { plugins: [DECK] }, async ($, on) => {
+  const { world, clock } = boot(on)
+  await start($, clock)
+  await begin($, clock)
+  await call($, world, { tool: 'Read', tool_use_id: 'r1', file_path: 'a.ts' }, 1200)
+  const panel = JSON.parse((await deck($, clock, 'deck-timeline')).text) as { title: string; isLive: boolean; rows: unknown[] }
+
+  expect(panel.title).toBe('this turn')
+  expect(panel.isLive).toBe(true)
+  expect(panel.rows.length).toBeGreaterThan(1)
+})
+
+test('a host keeps the pane from opening at the start of a session, even one the person kept', { plugins: [DECK] }, async ($, on) => {
+  const { world, clock } = boot(on)
+  world.store = { kept: true }
+  await deck($, clock, 'deck-host', 'docked')
+  await start($, clock)
+
+  expect(world.opened).toEqual([])
+})
+
+test('a host closes the pane that is open', { plugins: [DECK] }, async ($, on) => {
+  const { world, clock } = boot(on)
+  await start($, clock)
+  await ask($)
+
+  expect(world.panes).toEqual(['waterfall'])
+
+  await deck($, clock, 'deck-host', 'docked')
+
+  expect(world.panes).toEqual([])
+})
+
+test('/waterfall says where the chart is while a host has it, and opens nothing', { plugins: [DECK] }, async ($, on) => {
+  const { world, clock } = boot(on)
+  await start($, clock)
+  await deck($, clock, 'deck-host', 'docked')
+
+  expect(await ask($)).toEqual({ text: 'Waterfall is in the Deck: /deck timeline' })
+  expect(world.opened).toEqual([])
 })

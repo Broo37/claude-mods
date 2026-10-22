@@ -2,5 +2,8 @@
   "name": "tool-waterfall",
   "version": "0.1.0",
   "description": "A pane that charts the tool calls of the turn as bars along its time, like a browser's network tab; opened and closed with /waterfall",
-  "author": { "name": "Broo37" }
+  "author": {
+    "name": "Broo37"
+  },
+  "types": "./types/index.d.ts"
 }
