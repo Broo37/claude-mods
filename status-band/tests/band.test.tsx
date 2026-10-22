@@ -1988,6 +1988,7 @@ const DECK: Plugin = {
     on('command.run', { command: 'limits' }, async ($, e) => ({
       text: JSON.stringify(await $.statusBand.panel({ id: 'limits', columns: Number(e.args) })),
     }))
+    on('command.run', { command: 'deck-pet' }, async $ => ({ text: JSON.stringify(await $.statusBand.pet()) }))
     on('command.run', { command: 'deck-sessions' }, async ($, e) => ({
       text: JSON.stringify(await $.statusBand.panel({ id: 'sessions', columns: Number(e.args), rows: 8 })),
     }))
@@ -2147,4 +2148,28 @@ test('/sessions says where the sessions are while a host has them', { plugins: [
 
   expect(await $.command.run(SESSIONS_CMD)).toEqual({ text: 'Sessions are in the Deck: /deck sessions' })
   expect(world.panes).not.toContain('sessions')
+})
+
+const lentPet = async ($: Engine) => JSON.parse((await ask($, 'deck-pet', '')).text) as { columns: number; rows: number; cells: string; isStill: boolean } | null
+
+test("lends the pet's frame, 24 by 8, asleep and still at the start", { plugins: [DECK] }, async ($, on) => {
+  const { clock } = boot(on)
+  await start($, clock)
+
+  expect(await lentPet($)).toEqual({ columns: 24, rows: 8, cells: petFrame(CRAB, 'asleep', DIG_MS, AT_HOME).cells, isStill: true })
+})
+
+test('a turn that starts wakes the pet: its frame is no longer still', { plugins: [DECK] }, async ($, on) => {
+  const { clock } = boot(on)
+  await start($, clock)
+  await work($, clock)
+
+  expect((await lentPet($))?.isStill).toBe(false)
+})
+
+test('lends no pet while the pet option is off', { plugins: [DECK], options: { pet: 'off' } }, async ($, on) => {
+  const { clock } = boot(on)
+  await start($, clock)
+
+  expect(await lentPet($)).toBeNull()
 })

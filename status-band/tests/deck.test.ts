@@ -199,3 +199,16 @@ test('lends no session rows when no other session is open, or before anything is
   expect(sessionsAt({ ...VIEW, peers: [] }, 43)).toEqual([])
   expect(sessionsAt({ ...VIEW, now: 0, peers: PEERS }, 43)).toEqual([])
 })
+
+// ── One-line summaries ──────────────────────────────────────────────────────
+
+test('sums the limits up in one line', () => {
+  expect(plain(limitsPanelOf(VIEW, 43).summary ?? [])).toBe('5H 66% · 7D 8% · ctx 6%')
+  expect(plain(limitsPanelOf({ ...VIEW, now: 0 }, 43).summary ?? [])).toBe('(loading..)')
+  expect(plain(limitsPanelOf({ ...VIEW, limits: [] }, 43).summary ?? [])).toBe('ctx 6%')
+})
+
+test('sums the sessions up in one line, saying how many need you', () => {
+  expect(plain(sessionsPanelOf({ ...VIEW, peers: PEERS }, 43, 8).summary ?? [])).toBe('4 open · 1 needs you')
+  expect(plain(sessionsPanelOf({ ...VIEW, peers: PEERS.slice(0, 1) }, 43, 8).summary ?? [])).toBe('1 open')
+})

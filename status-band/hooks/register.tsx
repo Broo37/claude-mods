@@ -939,7 +939,7 @@ export const register: Register = (on, options) => {
   on('engine.create', async ($, e, next) => {
     const built = await next(e)
 
-    return { ...built, statusBand: { panel: async () => UNLENT, host: async () => false } }
+    return { ...built, statusBand: { panel: async () => UNLENT, host: async () => false, pet: async () => null } }
   })
 
   on('statusBand.panel', async ($, e) => {
@@ -969,6 +969,22 @@ export const register: Register = (on, options) => {
     $.ui.invalidate('ui.render')
 
     return { value: true }
+  })
+
+  // The pet's frame now, for the Deck to draw in its sessions panel: the
+  // bookkeeping the Sessions pane does before it draws one, then the frame.
+  on('statusBand.pet', async $ => {
+    if (pet === null) {
+      return { value: null }
+    }
+
+    const shown = await read($, view)
+    isSweating = isHot(shown.limits)
+    isUsedUp = isSpent(shown.limits)
+    const now = await $.clock.now()
+    restAfterHops(now)
+
+    return { value: { columns: PET_COLUMNS, rows: PET_ROWS, cells: petNow(pet, now).cells, isStill: isPetStill(pet, now) } }
   })
 
   on('session.start', async ($, e, next) => {

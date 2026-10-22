@@ -138,9 +138,24 @@ const labelOf = (view: View): StatusBandRun[] => [
   ...(view.effort === '' ? [] : [{ text: ` ${view.effort}`, color: rgb(PALETTE.peach) }]),
 ]
 
+// The limits in one line: the 5H and 7D windows, once read, and the context.
+const summaryOf = (view: View): StatusBandRun[] => {
+  const read = readingsOf(view)
+  const gap = text(' · ')
+
+  return runsOf([
+    ...(read.hasLimits
+      ? [text(`5H ${read.fiveHour}%`, PALETTE.lavender), gap, text(`7D ${read.sevenDay}%`, PALETTE.yellow), gap]
+      : []),
+    text(`ctx ${read.context}%`, PALETTE.pink),
+  ])
+}
+
 export const limitsPanelOf = (view: View, columns: number): StatusBandPanel => {
   if (view.now === 0) {
-    return { id: 'limits', title: 'limits', right: '', label: [], rows: [[{ text: LOADING, color: rgb(PALETTE.overlay) }]] }
+    const loading = [{ text: LOADING, color: rgb(PALETTE.overlay) }]
+
+    return { id: 'limits', title: 'limits', right: '', label: [], rows: [loading], summary: loading }
   }
 
   const bars = barRowsOf(view)
@@ -156,6 +171,7 @@ export const limitsPanelOf = (view: View, columns: number): StatusBandPanel => {
     right: `${cost(view.costUsd)} · ${duration(view.now - view.startedAt)}`,
     label: labelOf(view),
     rows: [...waiting, ...bars.map(row => runsOf(barLine(row, width))), placeOf(view, columns)],
+    summary: summaryOf(view),
   }
 }
 
@@ -167,7 +183,12 @@ const MARKS = ['?', '○', '◌', '●']
 // Sessions pane ranks them, its mark, its name and, at the right, what it is
 // doing and since when. None open, or nothing read yet: no rows.
 export const sessionsPanelOf = (view: View, columns: number, rows: number): StatusBandPanel => {
-  const panel: StatusBandPanel = { id: 'sessions', title: 'sessions', right: `${view.peers.length} open`, label: [], rows: [] }
+  const needing = view.peers.filter(peer => stateOf(peer).rank === 0).length
+  const summary: StatusBandRun[] = [
+    { text: `${view.peers.length} open` },
+    ...(needing > 0 ? [{ text: ` · ${needing} needs you`, color: rgb(PALETTE.pink) }] : []),
+  ]
+  const panel: StatusBandPanel = { id: 'sessions', title: 'sessions', right: `${view.peers.length} open`, label: [], rows: [], summary }
 
   if (view.now === 0 || view.peers.length === 0) {
     return panel

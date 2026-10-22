@@ -56,16 +56,24 @@ export type StatusBandPanel = {
   label: StatusBandRun[]
   rows: StatusBandRun[][]
   isLive?: boolean
+  // The panel in one line, for a host's mini summary.
+  summary?: StatusBandRun[]
 }
 
 // The mod that hosts the status, and whether its pane is in the dock now.
 export type StatusBandHost = { by: string; isDocked: boolean }
+
+// The pet as it stands now, for a host to draw in a raster of its own: its size
+// in cells, the cells (as a Raster takes them), and whether it has stopped
+// moving, so that nothing need paint it again until it moves.
+export type StatusBandPet = { columns: number; rows: number; cells: string; isStill: boolean }
 
 // What status-band lends another mod: its panel, and a way to host it, so the
 // Status tab stands aside, and the band too while the host is docked.
 export type StatusBand = {
   panel(args: { id: 'limits' | 'sessions'; columns: number; rows?: number }): Promise<StatusBandPanel>
   host(args: StatusBandHost): Promise<boolean>
+  pet(): Promise<StatusBandPet | null>
 }
 
 declare module 'claude-code' {
