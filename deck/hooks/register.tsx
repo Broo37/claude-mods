@@ -3,7 +3,7 @@ import type { EngineInterface, Register, Timer } from 'claude-code'
 
 import type { DeckTop } from '../types'
 
-import { headerOf, orderOf, panelsFrom, visible } from './frame'
+import { BORDERS, headerOf, miniOf, orderOf, panelsFrom } from './frame'
 import type { DeckPanel, DeckPanelId, DeckRun } from './frame'
 
 // The Deck: one tab of the side pane in place of Steps, Status, Waterfall and
@@ -26,9 +26,6 @@ const NARROWEST = 10
 const TIMELINE_ROWS = 10
 
 const SESSIONS_ROWS = 8
-
-// The width of terminal from which the side pane docks a pane asked for, in fullscreen.
-const DOCK_COLUMNS = 110
 
 // How often the Deck redraws while a panel moves on its own, so its clocks and bars move.
 const TICK_MS = 1000
@@ -58,7 +55,24 @@ const SYNC_MS = 250
 
 let ticking: Timer | null = null
 
-type Presentation = { isFullscreen: boolean; columns: number }
+// The pet (status-band's Clawd) stands under the sessions, in a raster of the
+// Deck's own: only that raster is repainted, by blit, never the whole pane, as
+// Flightdeck redraws only the region that moves. A timer started with the
+// session asks status-band for the pet's frame while one is drawn; a still pet
+// is looked at again only now and then. A refused blit (the raster is gone)
+// stops it until the next drawing.
+const PET_TICK_MS = 50
+
+const PET_REST_MS = 500
+
+// The drawing the raster stands in, its cells now, when to look at it next.
+let petAt: string | null = null
+
+let petCells = ''
+
+let petLookAt = 0
+
+let isPetStepping = false
 
 // Tells the mods the Deck hosts them, and whether it is in the dock now. One
 // that cannot be told (it reloads) is told again at the next change.
@@ -109,14 +123,54 @@ function keepTime($: EngineInterface, panels: readonly DeckPanel[]) {
   }
 }
 
-// Opens the Deck with a panel on top, or closes it when it is in front and
-// none is asked for: what /deck and the commands it took over do.
-async function show($: EngineInterface, wanted: DeckPanelId | '', presentation: Presentation) {
-  // Outside a docking side pane it would stand inline above the prompt, where the band is.
-  if (!presentation.isFullscreen || presentation.columns < DOCK_COLUMNS) {
-    return { text: `Deck: the side pane needs a fullscreen terminal at least ${DOCK_COLUMNS} columns wide.` }
+async function stepPet($: EngineInterface) {
+  if (petAt === null || isPetStepping) {
+    return
   }
 
+  const now = await $.clock.now()
+
+  if (now < petLookAt) {
+    return
+  }
+
+  isPetStepping = true
+
+  try {
+    const frame = await $.statusBand.pet()
+
+    if (frame === null) {
+      petAt = null
+
+      return
+    }
+
+    petLookAt = frame.isStill ? now + PET_REST_MS : 0
+
+    if (frame.cells === petCells) {
+      return
+    }
+
+    const painted = await $.ui.blit({ requestId: petAt, key: 'pet', columns: frame.columns, rows: frame.rows, cells: frame.cells })
+
+    if (painted.deny !== undefined) {
+      petAt = null
+
+      return
+    }
+
+    petCells = frame.cells
+  } catch {
+    petAt = null
+  } finally {
+    isPetStepping = false
+  }
+}
+
+// Opens the Deck with a panel on top, or closes it when it is in front and
+// none is asked for: what /deck and the commands it took over do. Where there
+// is no side pane, it stands inline above the prompt as its mini summary.
+async function show($: EngineInterface, wanted: DeckPanelId | '') {
   const pane = (await $.ui.panes()).find(one => one.id === PANE.id)
 
   if (wanted === '' && pane?.isShown === true) {
@@ -169,6 +223,7 @@ export const register: Register = (on, options) => {
         void hostAll($, seen)
       }
     })
+    $.clock.every(PET_TICK_MS, () => void stepPet($))
 
     if (isOpenAtStart) {
       $.clock.after(OPEN_AFTER_MS, () => void $.ui.open(PANE))
@@ -219,40 +274,63 @@ export const register: Register = (on, options) => {
       return { text: USAGE }
     }
 
-    return show($, wanted, e.presentation)
+    return show($, wanted)
   })
 
   // The commands of the tabs the Deck took over bring their panel to the top of it.
-  on('command.run', { command: 'band' }, async ($, e) => show($, SHORTCUTS.band, e.presentation))
+  on('command.run', { command: 'band' }, async $ => show($, SHORTCUTS.band))
 
-  on('command.run', { command: 'sessions' }, async ($, e) => show($, SHORTCUTS.sessions, e.presentation))
+  on('command.run', { command: 'sessions' }, async $ => show($, SHORTCUTS.sessions))
 
-  on('command.run', { command: 'waterfall' }, async ($, e) => show($, SHORTCUTS.waterfall, e.presentation))
+  on('command.run', { command: 'waterfall' }, async $ => show($, SHORTCUTS.waterfall))
 
   on('ui.render', { component: 'Pane', requestId: PANE.id }, async ($, e) => {
     const { Box, Text } = $.ui.resolve(e)
+    const textsOf = (runs: readonly DeckRun[]) => runs.map(run => <Text {...lookOf(run)}>{run.text}</Text>)
+    // Shown, the Deck has the status: status-band's band gives way, docked or inline.
+    seen = true
 
-    // Seated inline above the prompt, it is no tab of the side pane: it closes
-    // again, and the band keeps its place.
+    // Inline above the prompt, where no side pane is: the mini summary, a few rows.
     if (e.props.placement !== 'dock') {
-      seen = false
-      $.clock.after(0, () => void $.ui.close({ id: PANE.id }))
+      petAt = null
+      const lent = await panelsOf($, panels, Math.max(NARROWEST, e.props.bodyColumns))
 
-      return <Box />
+      return (
+        <Box flexDirection="column">
+          {miniOf(lent, e.props.bodyColumns).map(row => (
+            <Box>{textsOf(row)}</Box>
+          ))}
+        </Box>
+      )
     }
 
-    seen = true
     const lent = await panelsOf($, panels, Math.max(NARROWEST, e.props.bodyColumns - FRAME))
     const order = orderOf(panels, await read($, top))
-    const shown = order.flatMap(id => visible(lent).filter(panel => panel.id === id))
-    const textsOf = (runs: readonly DeckRun[]) => runs.map(run => <Text {...lookOf(run)}>{run.text}</Text>)
+    // The pet, where the surface draws rasters and the sessions are shown.
+    const PetRaster = e.surface === 'terminal' ? $.ui.resolve(e).Raster : undefined
+    const pet = PetRaster !== undefined && panels.includes('sessions') ? await $.statusBand.pet().catch(() => null) : null
+    petAt = pet === null ? null : e.requestId
+
+    if (pet !== null) {
+      petCells = pet.cells
+      petLookAt = pet.isStill ? (await $.clock.now()) + PET_REST_MS : 0
+    }
+
+    const isShown = (panel: DeckPanel) => panel.rows.length > 0 || (panel.id === 'sessions' && pet !== null)
+    const shown = order.flatMap(id => lent.filter(panel => panel.id === id && isShown(panel)))
     keepTime($, lent)
 
     return (
       <Box flexDirection="column">
         <Box>{textsOf(headerOf(lent, e.props.bodyColumns))}</Box>
         {shown.map(panel => (
-          <Box borderStyle="round" flexDirection="column" paddingX={1}>
+          <Box
+            borderStyle="round"
+            borderColor={BORDERS[panel.id as DeckPanelId] ?? 'inactive'}
+            {...(panel.isLive === false && { borderDimColor: true })}
+            flexDirection="column"
+            paddingX={1}
+          >
             <Box>
               <Text bold>{panel.title}</Text>
               <Box flexGrow={1} />
@@ -261,6 +339,11 @@ export const register: Register = (on, options) => {
             {panel.rows.map(row => (
               <Box>{textsOf(row)}</Box>
             ))}
+            {panel.id === 'sessions' && pet !== null && PetRaster !== undefined ? (
+              <Box marginTop={panel.rows.length > 0 ? 1 : 0}>
+                <PetRaster key="pet" columns={pet.columns} rows={pet.rows} cells={pet.cells} />
+              </Box>
+            ) : null}
           </Box>
         ))}
       </Box>

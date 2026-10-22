@@ -58,9 +58,10 @@ Each card covers one mod: what it does, what to type and what you can set. Setti
   - **plan:** the steps and their meters.
   - **limits:** 5H, 7D, Codex and context as flat bars with their reset times, then your folder and git state.
   - **timeline:** this turn's tool calls as bars over time, or the last turn's.
-  - **sessions:** your other Claude Code sessions, a row each: `?` needs you, `○` waiting, `◌` shell, `●` working.
+  - **sessions:** your other Claude Code sessions, a row each: `?` needs you, `○` waiting, `◌` shell, `●` working. Under them stands the pet, Clawd, moving as he does in the Sessions pane. Only his picture is repainted, never the whole pane.
 
-  A panel with nothing to show takes no room: no timeline before the first tool call, and no sessions while no other session is open.
+  Each box has its own color from your theme, dimmed while it rests (a finished job, a turn that is over). A panel with nothing to show takes no room: no timeline before the first tool call, and no sessions while no other session is open and the pet is off.
+- **Outside fullscreen**, where there is no side pane, the Deck stands above the prompt as a summary of four rows at most: the header, the step at work, `5H 66% · 7D 8% · ctx 6%`, and the turn or your sessions.
 - **Type:**
   - `/deck` closes it, or brings it to the front.
   - `/deck plan`, `/deck limits`, `/deck timeline` or `/deck sessions` puts that panel on top.
@@ -71,8 +72,7 @@ Each card covers one mod: what it does, what to type and what you can set. Setti
 - **Works with:**
   - It needs `clean-view`, `status-band` and `tool-waterfall`, which lend it their panels.
   - Closed, status-band's band comes back above the prompt, so nothing goes missing.
-  - It needs a fullscreen terminal at least 110 columns wide.
-  - The pet of the Sessions pane doesn't come along yet: while the Deck is loaded, Clawd stays away.
+  - The pet is status-band's: `pet` in its settings picks the creature, or `off`.
 
 ### 🧹 `clean-view`
 
@@ -90,7 +90,7 @@ Each card covers one mod: what it does, what to type and what you can set. Setti
 ### 📊 `status-band`
 
 - **What:** a `Status` tab in the side pane, with your 5H, 7D, Codex and context bars standing side by side, plus model, git, cost and reset times. Where the tab can't show, it becomes a band by the prompt. With `deck` loaded, the limits are the Deck's limits panel and the `Status` tab stays closed.
-- **Type:** `/band` brings the Status tab to the front. `/sessions` shows your other Claude Code sessions in a pane, with a pet under the list. With `deck` loaded, the sessions are the Deck's sessions panel, and the Sessions pane (and its pet) stays closed.
+- **Type:** `/band` brings the Status tab to the front. `/sessions` shows your other Claude Code sessions in a pane, with a pet under the list. With `deck` loaded, the sessions and the pet are the Deck's sessions panel, and the Sessions pane stays closed.
 - **The pet:** it sleeps while you're idle, walks while Claude works, hops when a turn ends, and stands under a `?` while Claude waits for you. The crab is Clawd.
 - **Set:** `tab` (on), `size` (`xsmall` to `xlarge`), `animate` (on), `position` (`above` or `below` the prompt), `pet` (`crab`, `cat`, `ghost`, `smiley` or `off`).
 

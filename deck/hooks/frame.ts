@@ -6,13 +6,29 @@
 export type DeckRun = { text: string; color?: string; backgroundColor?: string; isBold?: boolean; isDim?: boolean; isInverse?: boolean }
 
 // A lent panel: its title and what stands at its right, a label for the header,
-// rows, and whether it moves on its own (a job or a turn that runs).
-export type DeckPanel = { id: string; title: string; right: string; label: DeckRun[]; rows: DeckRun[][]; isLive?: boolean }
+// rows, whether it moves on its own (a job or a turn that runs), and the panel
+// in one line for the mini summary.
+export type DeckPanel = {
+  id: string
+  title: string
+  right: string
+  label: DeckRun[]
+  rows: DeckRun[][]
+  isLive?: boolean
+  summary?: DeckRun[]
+}
 
 // The panels, in their own order.
 export const PANELS = ['plan', 'limits', 'timeline', 'sessions'] as const
 
 export type DeckPanelId = (typeof PANELS)[number]
+
+// Each panel's border, a color of the person's theme (as Flightdeck takes them),
+// so the boxes read apart; a panel that rests has it dimmed.
+export const BORDERS: Record<DeckPanelId, string> = { plan: 'claude', limits: 'suggestion', timeline: 'success', sessions: 'merged' }
+
+// The mini summary's rows: the header and a line a panel.
+const MINI = 4
 
 // Whose label comes first in the header: what the session runs on, then the job.
 const LABELS = ['limits', 'plan'] as const
@@ -68,4 +84,14 @@ export const headerOf = (panels: readonly DeckPanel[], columns: number): DeckRun
   const labels = LABELS.flatMap(id => panels.filter(panel => panel.id === id && panel.label.length > 0).map(panel => panel.label))
 
   return cut([{ text: 'DECK', isBold: true }, ...labels.flatMap(label => [SEPARATOR, ...label])], columns)
+}
+
+// The Deck in a few rows, where it stands inline above the prompt: the header,
+// then each panel's line in the panels' own order, as many as there is room for.
+export const miniOf = (panels: readonly DeckPanel[], columns: number): DeckRun[][] => {
+  const lines = PANELS.flatMap(id =>
+    panels.filter(panel => panel.id === id && (panel.summary?.length ?? 0) > 0).map(panel => cut(panel.summary ?? [], columns)),
+  )
+
+  return [headerOf(panels, columns), ...lines].slice(0, MINI)
 }

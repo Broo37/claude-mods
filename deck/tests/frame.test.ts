@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 
-import { PANELS, headerOf, orderOf, panelsFrom, visible } from '../hooks/frame'
+import { PANELS, headerOf, miniOf, orderOf, panelsFrom, visible } from '../hooks/frame'
 import type { DeckPanel, DeckRun } from '../hooks/frame'
 
 const plain = (runs: readonly DeckRun[]) => runs.map(run => run.text).join('')
@@ -63,4 +63,34 @@ test('falls back to every panel in its own order when the setting names none', (
   expect(panelsFrom('')).toEqual([...PANELS])
   expect(panelsFrom('nope')).toEqual([...PANELS])
   expect(panelsFrom(undefined)).toEqual(['plan', 'limits', 'timeline', 'sessions'])
+})
+
+const TIMELINE: DeckPanel = { id: 'timeline', title: 'this turn', right: '41s', label: [], rows: [[{ text: 'Read ██' }]], summary: [{ text: 'turn 41s… · 2 tools' }] }
+
+const SESSIONS: DeckPanel = { id: 'sessions', title: 'sessions', right: '2 open', label: [], rows: [[{ text: '○ a' }]], summary: [{ text: '2 open' }] }
+
+const SUMMED = [
+  { ...PLAN, summary: [{ text: '▶ 2/4 Build the pricing section' }] },
+  { ...LIMITS, summary: [{ text: '5H 66% · 7D 8% · ctx 6%' }] },
+  TIMELINE,
+  SESSIONS,
+]
+
+test('sums the Deck up in four rows at most: the header, then a line a panel', () => {
+  expect(miniOf(SUMMED, 60).map(plain)).toEqual([
+    'DECK · Opus 5.5 xhigh · ▶ 2/4 · 1m 12s',
+    '▶ 2/4 Build the pricing section',
+    '5H 66% · 7D 8% · ctx 6%',
+    'turn 41s… · 2 tools',
+  ])
+})
+
+test('sums up the sessions where there is no turn to sum up', () => {
+  expect(miniOf([SUMMED[0], SUMMED[1], { ...TIMELINE, summary: [] }, SESSIONS] as DeckPanel[], 60).map(plain).at(-1)).toBe('2 open')
+})
+
+test('cuts every row of the mini summary to the width', () => {
+  for (const row of miniOf(SUMMED, 30).map(plain)) {
+    expect(row.length).toBeLessThanOrEqual(30)
+  }
 })

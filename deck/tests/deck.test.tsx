@@ -21,6 +21,7 @@ const CLEAN_VIEW: Plugin = {
       label: [{ text: '▶ 2/4 · 1m 12s' }],
       rows: [[{ text: '▶ 🔨 Build the pricing section' }]],
       isLive: true,
+      summary: [{ text: '▶ 2/4 ' }, { text: 'Build the pricing section', isBold: true }],
     }
 
     on('engine.create', async ($, e, next) => ({
@@ -60,6 +61,7 @@ const STATUS_BAND: Plugin = {
       right: '$ 0.42 · 3m',
       label: [{ text: 'Opus 5.5', isBold: true }, { text: ' xhigh' }],
       rows: [[{ text: '5H  ████ 66%' }], [{ text: 'master !1', isDim: true }]],
+      summary: [{ text: '5H 66% · 7D 8% · ctx 6%' }],
     }
     const sessions = {
       id: 'sessions' as const,
@@ -67,11 +69,25 @@ const STATUS_BAND: Plugin = {
       right: '2 open',
       label: [],
       rows: [[{ text: '○ geisa-pk  waiting 29m' }], [{ text: '● claude-mods  working 4m' }]],
+      summary: [{ text: '2 open' }],
     }
+    // A frame of the pet: spaces whose ink tells one frame from the next, as a Raster takes them.
+    const cellsOf = (n: number) => {
+      const words = new Uint32Array(24 * 8 * 3)
+
+      for (let i = 0; i < 24 * 8; i += 1) {
+        words[i * 3] = 0x20
+        words[i * 3 + 1] = n & 0xffffff
+        words[i * 3 + 2] = 0x01000000
+      }
+
+      return (new Uint8Array(words.buffer) as Uint8Array & { toBase64(): string }).toBase64()
+    }
+    let frames = 0
 
     on('engine.create', async ($, e, next) => ({
       ...(await next(e)),
-      statusBand: { panel: async () => limits, host: async () => false },
+      statusBand: { panel: async () => limits, host: async () => false, pet: async () => null },
     }))
     on('statusBand.panel', async ($, e) => {
       if (e.id === 'sessions') {
@@ -84,6 +100,17 @@ const STATUS_BAND: Plugin = {
       }
 
       return { value: limits }
+    })
+    on('statusBand.pet', async $ => {
+      const way = await $.env.get('DECK_PET')
+
+      if (way === 'off') {
+        return { value: null }
+      }
+
+      frames += 1
+
+      return { value: { columns: 24, rows: 8, cells: cellsOf(way === 'still' ? 1 : frames), isStill: way === 'still' } }
     })
     on('command.run', { command: 'touch-view' }, async $ => {
       await $.state.set({ plugin: 'status-band', key: 'view' }, { now: 1 } as never)
@@ -109,6 +136,7 @@ const TOOL_WATERFALL: Plugin = {
       label: [],
       rows: [[{ text: '0s─────41s' }], [{ text: 'Read  ██' }]],
       isLive: true,
+      summary: [{ text: 'turn 41s… · 2 tools' }],
     }
 
     on('engine.create', async ($, e, next) => ({
@@ -144,6 +172,8 @@ const boot = (on: On, env: Record<string, string> = {}) => {
     commands: [] as string[],
     toasts: [] as string[],
     redraws: 0,
+    blits: [] as { requestId: string; key: string; cells?: string }[],
+    blitDeny: '',
   }
   const clock = mock.clock(on, { now: NOW })
   mock.env(on, env)
@@ -160,6 +190,11 @@ const boot = (on: On, env: Record<string, string> = {}) => {
     world.toasts.push(e.text)
 
     return { value: undefined }
+  })
+  on('ui.blit', ($, e) => {
+    world.blits.push(e)
+
+    return { value: world.blitDeny === '' ? {} : { deny: world.blitDeny } }
   })
   on('ui.invalidate', () => {
     world.redraws += 1
@@ -287,7 +322,7 @@ test('tells both mods once that it is docked, when it is first drawn in the dock
 })
 
 test('draws its header, then the plan box, then the limits box', OWNERS, async ($, on) => {
-  const { clock } = boot(on)
+  const { clock } = boot(on, { DECK_PET: 'off' })
   await start($, clock)
   const lines = linesOf(await mountDeck($))
 
@@ -364,15 +399,13 @@ test('says how to use /deck when asked for something else', OWNERS, async ($, on
   expect(await deck($, clock, 'everything')).toEqual({ text: 'Usage: /deck [plan|limits|timeline|sessions]' })
 })
 
-test('says what /deck needs where the side pane cannot dock', OWNERS, async ($, on) => {
+test('opens with /deck outside fullscreen too, where it stands inline', OWNERS, async ($, on) => {
   const { world, clock } = boot(on)
   await start($, clock)
   world.opened = []
 
-  expect(await deck($, clock, '', false)).toEqual({
-    text: 'Deck: the side pane needs a fullscreen terminal at least 110 columns wide.',
-  })
-  expect(world.opened).toEqual([])
+  expect(await deck($, clock, '', false)).toEqual({ text: 'Deck opened.' })
+  expect(world.opened).toEqual(['deck'])
 })
 
 test('draws the other panel and says which one is not available when its mod throws', OWNERS, async ($, on) => {
@@ -384,18 +417,31 @@ test('draws the other panel and says which one is not available when its mod thr
   expect(lines).toContain('limits: not available')
 })
 
-test('seated inline above the prompt, closes itself and tells both mods it is not docked', OWNERS, async ($, on) => {
+test('inline above the prompt it draws the mini summary and stays open', OWNERS, async ($, on) => {
   const { world, clock } = boot(on)
   await start($, clock)
   await clock.advance(OPEN_AFTER_MS)
-  await mountDeck($)
+
+  expect(linesOf(await mountDeck($, 'terminal', 'inline'))).toEqual([
+    'DECK · Opus 5.5 xhigh · ▶ 2/4 · 1m 12s',
+    '▶ 2/4 Build the pricing section',
+    '5H 66% · 7D 8% · ctx 6%',
+    'turn 41s… · 2 tools',
+  ])
+
   await clock.advance(SYNC_MS)
+
+  expect(world.panes).toEqual(['deck'])
+})
+
+test('inline it tells the mods it is shown, so the band gives way to it', OWNERS, async ($, on) => {
+  const { world, clock } = boot(on)
+  await start($, clock)
   world.toasts = []
   await mountDeck($, 'terminal', 'inline')
   await clock.advance(SYNC_MS)
 
-  expect(world.panes).toEqual([])
-  expect(docks(world, false)).toEqual(ALL)
+  expect(docks(world, true)).toEqual(ALL)
 })
 
 test('hosts both mods again after /clear, as docked as it was', OWNERS, async ($, on) => {
@@ -440,7 +486,7 @@ test('shows the panels the panels setting names, in its order', { ...OWNERS, opt
 })
 
 test('leaves out the timeline before any tool call, and the sessions when none is open', OWNERS, async ($, on) => {
-  const { clock } = boot(on, { DECK_TIMELINE: 'none', DECK_SESSIONS: 'none' })
+  const { clock } = boot(on, { DECK_TIMELINE: 'none', DECK_SESSIONS: 'none', DECK_PET: 'off' })
   await start($, clock)
 
   expect(panelTitles(linesOf(await mountDeck($)))).toEqual(['plan', 'limits'])
@@ -488,4 +534,99 @@ test('keeps still while no panel is live', OWNERS, async ($, on) => {
   await clock.advance(3000)
 
   expect(world.redraws).toBe(before)
+})
+
+// ── Borders and Clawd ───────────────────────────────────────────────────────
+
+const boxesOf = async ($: Engine, surface: 'terminal' | 'desktop' = 'terminal') =>
+  ((await mountDeck($, surface)).children ?? []).slice(1) as Drawn[]
+
+const find = (node: unknown, type: string): Drawn | undefined => {
+  if (typeof node !== 'object' || node === null) {
+    return undefined
+  }
+
+  const drawn = node as Drawn
+
+  return drawn.type === type ? drawn : (drawn.children ?? []).map(child => find(child, type)).find(Boolean)
+}
+
+const petBlits = (world: World) => world.blits.filter(blit => blit.key === 'pet')
+
+test('draws each box in its own theme color', OWNERS, async ($, on) => {
+  const { clock } = boot(on)
+  await start($, clock)
+
+  expect((await boxesOf($)).map(box => box.props?.borderColor)).toEqual(['claude', 'suggestion', 'success', 'merged'])
+})
+
+test("dims the border of a panel that rests, and only that one's", OWNERS, async ($, on) => {
+  const { clock } = boot(on, { DECK_TIMELINE: 'still' })
+  await start($, clock)
+
+  expect((await boxesOf($)).map(box => box.props?.borderDimColor === true)).toEqual([false, false, true, false])
+})
+
+test('draws the pet under the sessions on the terminal', OWNERS, async ($, on) => {
+  const { clock } = boot(on)
+  await start($, clock)
+  const pet = find((await boxesOf($))[3], 'Raster')
+
+  expect(pet?.props).toMatchObject({ key: 'pet', columns: 24, rows: 8 })
+})
+
+test('draws no pet on a surface that has no raster', OWNERS, async ($, on) => {
+  const { clock } = boot(on)
+  await start($, clock)
+
+  expect(find(await mountDeck($, 'desktop'), 'Raster')).toBeUndefined()
+})
+
+test('keeps the sessions panel for the pet alone when no other session is open', OWNERS, async ($, on) => {
+  const { clock } = boot(on, { DECK_SESSIONS: 'none' })
+  await start($, clock)
+  const sessions = (await boxesOf($))[3]
+
+  expect(find(sessions, 'Raster')?.props?.key).toBe('pet')
+})
+
+test('leaves the sessions panel out with the pet off and no other session open', OWNERS, async ($, on) => {
+  const { clock } = boot(on, { DECK_PET: 'off', DECK_SESSIONS: 'none' })
+  await start($, clock)
+
+  expect(await boxesOf($)).toHaveLength(3)
+})
+
+test('repaints the pet alone, by blit, while it moves', OWNERS, async ($, on) => {
+  const { world, clock } = boot(on)
+  await start($, clock)
+  await mountDeck($)
+  const drawn = world.redraws
+  await clock.advance(500)
+
+  expect(petBlits(world).length).toBeGreaterThan(3)
+  expect(petBlits(world).every(blit => blit.requestId === 'deck')).toBe(true)
+  expect(world.redraws - drawn).toBeLessThan(petBlits(world).length)
+})
+
+test('paints nothing while the pet keeps still', OWNERS, async ($, on) => {
+  const { world, clock } = boot(on, { DECK_PET: 'still' })
+  await start($, clock)
+  await mountDeck($)
+  await clock.advance(2000)
+
+  expect(petBlits(world)).toEqual([])
+})
+
+test('stops repainting the pet once a blit is denied', OWNERS, async ($, on) => {
+  const { world, clock } = boot(on)
+  await start($, clock)
+  await mountDeck($)
+  world.blitDeny = 'not mounted'
+  await clock.advance(500)
+  const tried = petBlits(world).length
+  await clock.advance(500)
+
+  expect(tried).toBe(1)
+  expect(petBlits(world)).toHaveLength(1)
 })
