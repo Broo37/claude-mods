@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 
-import { headerOf, orderOf, visible } from '../hooks/frame'
+import { PANELS, headerOf, orderOf, panelsFrom, visible } from '../hooks/frame'
 import type { DeckPanel, DeckRun } from '../hooks/frame'
 
 const plain = (runs: readonly DeckRun[]) => runs.map(run => run.text).join('')
@@ -52,4 +52,15 @@ test('cuts the header to the width, ending in an ellipsis', () => {
 
 test('shows only the panels with rows', () => {
   expect(visible([{ ...PLAN, rows: [] }, LIMITS]).map(panel => panel.id)).toEqual(['limits'])
+})
+
+test('reads the panels setting: known panels in its order, the rest dropped', () => {
+  expect(panelsFrom('sessions, limits')).toEqual(['sessions', 'limits'])
+  expect(panelsFrom('plan,nope,timeline,plan')).toEqual(['plan', 'timeline'])
+})
+
+test('falls back to every panel in its own order when the setting names none', () => {
+  expect(panelsFrom('')).toEqual([...PANELS])
+  expect(panelsFrom('nope')).toEqual([...PANELS])
+  expect(panelsFrom(undefined)).toEqual(['plan', 'limits', 'timeline', 'sessions'])
 })

@@ -20,6 +20,7 @@ const CLEAN_VIEW: Plugin = {
       right: '',
       label: [{ text: '▶ 2/4 · 1m 12s' }],
       rows: [[{ text: '▶ 🔨 Build the pricing section' }]],
+      isLive: true,
     }
 
     on('engine.create', async ($, e, next) => ({
@@ -33,7 +34,7 @@ const CLEAN_VIEW: Plugin = {
         return { deny: 'reloading' }
       }
 
-      return { value: way === 'idle' ? { ...plan, label: [{ text: 'idle' }], rows: [] } : plan }
+      return { value: way === 'idle' ? { ...plan, label: [{ text: 'idle' }], rows: [], isLive: false } : plan }
     })
     on('command.run', { command: 'touch-plan' }, async $ => {
       await $.state.set({ plugin: 'clean-view', key: 'checklist' }, { phase: 'working' } as never)
@@ -60,12 +61,23 @@ const STATUS_BAND: Plugin = {
       label: [{ text: 'Opus 5.5', isBold: true }, { text: ' xhigh' }],
       rows: [[{ text: '5H  ████ 66%' }], [{ text: 'master !1', isDim: true }]],
     }
+    const sessions = {
+      id: 'sessions' as const,
+      title: 'sessions',
+      right: '2 open',
+      label: [],
+      rows: [[{ text: '○ geisa-pk  waiting 29m' }], [{ text: '● claude-mods  working 4m' }]],
+    }
 
     on('engine.create', async ($, e, next) => ({
       ...(await next(e)),
       statusBand: { panel: async () => limits, host: async () => false },
     }))
-    on('statusBand.panel', async $ => {
+    on('statusBand.panel', async ($, e) => {
+      if (e.id === 'sessions') {
+        return { value: (await $.env.get('DECK_SESSIONS')) === 'none' ? { ...sessions, rows: [] } : sessions }
+      }
+
       // A hook that throws is skipped and the method beneath answers; a refusal reaches the caller.
       if ((await $.env.get('DECK_LIMITS')) === 'failing') {
         return { deny: 'reloading' }
@@ -87,7 +99,41 @@ const STATUS_BAND: Plugin = {
   },
 }
 
-const OWNERS = { plugins: [CLEAN_VIEW, STATUS_BAND] }
+const TOOL_WATERFALL: Plugin = {
+  name: 'tool-waterfall',
+  register(on) {
+    const timeline = {
+      id: 'timeline' as const,
+      title: 'this turn',
+      right: '41s… · 2 tools',
+      label: [],
+      rows: [[{ text: '0s─────41s' }], [{ text: 'Read  ██' }]],
+      isLive: true,
+    }
+
+    on('engine.create', async ($, e, next) => ({
+      ...(await next(e)),
+      toolWaterfall: { panel: async () => timeline, host: async () => false },
+    }))
+    on('toolWaterfall.panel', async $ => {
+      const way = await $.env.get('DECK_TIMELINE')
+
+      return {
+        value: way === 'none' ? { ...timeline, rows: [], isLive: false } : way === 'still' ? { ...timeline, isLive: false } : timeline,
+      }
+    })
+    on('toolWaterfall.host', async ($, e) => {
+      await $.state.set({ plugin: 'tool-waterfall', key: 'host' }, { by: e.by, isDocked: e.isDocked })
+      await $.ui.toast(`host tool-waterfall ${e.by} ${e.isDocked ? 'docked' : 'undocked'}`)
+
+      return { value: true }
+    })
+  },
+}
+
+const OWNERS = { plugins: [CLEAN_VIEW, STATUS_BAND, TOOL_WATERFALL] }
+
+const ALL = ['clean-view', 'status-band', 'tool-waterfall']
 
 // The stubs beneath the mods: they answer in Claude Code's place.
 const boot = (on: On, env: Record<string, string> = {}) => {
@@ -217,7 +263,7 @@ test('opens at the start of a session, after the other tabs so that it is in fro
 
   expect(world.opened).toEqual(['deck'])
   expect(world.commands).toEqual(['deck'])
-  expect(docks(world, false)).toEqual(['clean-view', 'status-band'])
+  expect(docks(world, false)).toEqual(ALL)
   expect(hostsOf(world).every(host => host.by === 'deck')).toBe(true)
 })
 
@@ -227,7 +273,7 @@ test('stays closed at the start of a session while Open at start is off', { ...O
   await clock.advance(OPEN_AFTER_MS)
 
   expect(world.opened).toEqual([])
-  expect(docks(world, false)).toEqual(['clean-view', 'status-band'])
+  expect(docks(world, false)).toEqual(ALL)
 })
 
 test('tells both mods once that it is docked, when it is first drawn in the dock', OWNERS, async ($, on) => {
@@ -237,7 +283,7 @@ test('tells both mods once that it is docked, when it is first drawn in the dock
   await mountDeck($)
   await clock.advance(SYNC_MS * 4)
 
-  expect(docks(world, true)).toEqual(['clean-view', 'status-band'])
+  expect(docks(world, true)).toEqual(ALL)
 })
 
 test('draws its header, then the plan box, then the limits box', OWNERS, async ($, on) => {
@@ -252,6 +298,12 @@ test('draws its header, then the plan box, then the limits box', OWNERS, async (
     'limits$ 0.42 · 3m',
     '5H  ████ 66%',
     'master !1',
+    'this turn41s… · 2 tools',
+    '0s─────41s',
+    'Read  ██',
+    'sessions2 open',
+    '○ geisa-pk  waiting 29m',
+    '● claude-mods  working 4m',
   ])
 })
 
@@ -260,7 +312,7 @@ test('draws each panel in a round box with a cell of room each side', OWNERS, as
   await start($, clock)
   const boxes = ((await mountDeck($)).children ?? []).slice(1) as Drawn[]
 
-  expect(boxes).toHaveLength(2)
+  expect(boxes).toHaveLength(4)
   expect(boxes.every(box => box.props?.borderStyle === 'round' && box.props?.paddingX === 1)).toBe(true)
 })
 
@@ -309,7 +361,7 @@ test('says how to use /deck when asked for something else', OWNERS, async ($, on
   const { clock } = boot(on)
   await start($, clock)
 
-  expect(await deck($, clock, 'sessions')).toEqual({ text: 'Usage: /deck [plan|limits]' })
+  expect(await deck($, clock, 'everything')).toEqual({ text: 'Usage: /deck [plan|limits|timeline|sessions]' })
 })
 
 test('says what /deck needs where the side pane cannot dock', OWNERS, async ($, on) => {
@@ -343,7 +395,7 @@ test('seated inline above the prompt, closes itself and tells both mods it is no
   await clock.advance(SYNC_MS)
 
   expect(world.panes).toEqual([])
-  expect(docks(world, false)).toEqual(['clean-view', 'status-band'])
+  expect(docks(world, false)).toEqual(ALL)
 })
 
 test('hosts both mods again after /clear, as docked as it was', OWNERS, async ($, on) => {
@@ -355,7 +407,7 @@ test('hosts both mods again after /clear, as docked as it was', OWNERS, async ($
   await $.classic.SessionStart({ source: 'clear' })
   await clock.settle()
 
-  expect(docks(world, true)).toEqual(['clean-view', 'status-band'])
+  expect(docks(world, true)).toEqual(ALL)
 })
 
 test('redraws when the checklist or the status changes', OWNERS, async ($, on) => {
@@ -375,4 +427,65 @@ test('draws the same on a surface that is not a terminal', OWNERS, async ($, on)
   for (const surface of ['terminal', 'desktop'] as const) {
     expect(linesOf(await mountDeck($, surface))[0]).toBe('DECK · Opus 5.5 xhigh · ▶ 2/4 · 1m 12s')
   }
+})
+
+const panelTitles = (lines: string[]) =>
+  lines.filter(line => /^(plan|limits|this turn|last turn|sessions)/.test(line)).map(line => line.split(/[0-9$]/)[0])
+
+test('shows the panels the panels setting names, in its order', { ...OWNERS, options: { panels: 'sessions, limits, nope' } }, async ($, on) => {
+  const { clock } = boot(on)
+  await start($, clock)
+
+  expect(panelTitles(linesOf(await mountDeck($)))).toEqual(['sessions', 'limits'])
+})
+
+test('leaves out the timeline before any tool call, and the sessions when none is open', OWNERS, async ($, on) => {
+  const { clock } = boot(on, { DECK_TIMELINE: 'none', DECK_SESSIONS: 'none' })
+  await start($, clock)
+
+  expect(panelTitles(linesOf(await mountDeck($)))).toEqual(['plan', 'limits'])
+})
+
+const SHORTCUTS = [
+  ['band', 'limits', 'limits'],
+  ['sessions', 'sessions', 'sessions'],
+  ['waterfall', 'timeline', 'this turn'],
+] as const
+
+for (const [command, panel, title] of SHORTCUTS) {
+  test(`/${command} puts the ${panel} panel on top of the Deck`, OWNERS, async ($, on) => {
+    const { clock } = boot(on)
+    await start($, clock)
+
+    expect(await deck($, clock, '', true, command)).toEqual({ text: `Deck: ${panel} on top.` })
+    expect(panelTitles(linesOf(await mountDeck($)))[0]).toBe(title)
+  })
+}
+
+test('/deck timeline and /deck sessions put those panels on top', OWNERS, async ($, on) => {
+  const { clock } = boot(on)
+  await start($, clock)
+
+  expect(await deck($, clock, 'timeline')).toEqual({ text: 'Deck: timeline on top.' })
+  expect(await deck($, clock, 'sessions')).toEqual({ text: 'Deck: sessions on top.' })
+})
+
+test('redraws on its own while a panel is live', OWNERS, async ($, on) => {
+  const { world, clock } = boot(on, { DECK_PLAN: 'idle', DECK_TIMELINE: 'live' })
+  await start($, clock)
+  await mountDeck($)
+  const before = world.redraws
+  await clock.advance(3000)
+
+  expect(world.redraws).toBeGreaterThan(before)
+})
+
+test('keeps still while no panel is live', OWNERS, async ($, on) => {
+  const { world, clock } = boot(on, { DECK_PLAN: 'idle', DECK_TIMELINE: 'still' })
+  await start($, clock)
+  await mountDeck($)
+  const before = world.redraws
+  await clock.advance(3000)
+
+  expect(world.redraws).toBe(before)
 })

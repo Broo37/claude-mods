@@ -1,11 +1,11 @@
 # claude-mods
 
-Mods for [Claude Code](https://claude.com/claude-code): plugins of function hooks that change how a session looks and behaves. There are eleven. Install the ones you want, then find each one's card in the [cheat sheet](#cheat-sheet). Each installs on its own except two: `confetti` needs `clean-view`, and `deck` needs `clean-view` and `status-band`.
+Mods for [Claude Code](https://claude.com/claude-code): plugins of function hooks that change how a session looks and behaves. There are eleven. Install the ones you want, then find each one's card in the [cheat sheet](#cheat-sheet). Each installs on its own except two: `confetti` needs `clean-view`, and `deck` needs `clean-view`, `status-band` and `tool-waterfall`.
 
 | Mod | In one line |
 | --- | --- |
 | [`confetti`](#-confetti) | A burst of pixel confetti when a job ends as All done |
-| [`deck`](#️-deck) | The plan and your limits in one tab of boxed panels |
+| [`deck`](#️-deck) | The plan, your limits, the turn and your sessions in one tab of boxed panels |
 | [`clean-view`](#-clean-view) | Hides Claude's tool calls and shows its plan as a checklist |
 | [`fold-view`](#-fold-view) | Folds every tool call to one line a click opens |
 | [`status-band`](#-status-band) | Model, git, cost and your usage limits as bars, plus a pet |
@@ -54,10 +54,25 @@ Each card covers one mod: what it does, what to type and what you can set. Setti
 
 ### 🗂️ `deck`
 
-- **What:** one tab of the side pane, `Deck`, in place of Clean View's `Steps` tab and status-band's `Status` tab. A header line names the model and the job's state (`DECK · Opus 5.5 xhigh · ▶ 2/4 · 1m 12s`), and under it boxed panels: **plan** (the steps and their meters) and **limits** (5H, 7D, Codex and context as flat bars with their reset times, then your folder and git state). A panel with nothing to show takes no room.
-- **Type:** `/deck` to close it or bring it to the front, `/deck limits` or `/deck plan` to put that panel on top.
-- **Set:** `openOnStart` (on): open the Deck when a session starts.
-- **Works with:** it needs `clean-view` and `status-band`, which lend it their panels. Closed, status-band's band comes back above the prompt, so nothing goes missing. It needs a fullscreen terminal at least 110 columns wide.
+- **What:** one tab of the side pane, `Deck`, in place of the `Steps`, `Status`, `Waterfall` and `Sessions` tabs. A header line names the model and the job's state (`DECK · Opus 5.5 xhigh · ▶ 2/4 · 1m 12s`). Under it are four boxed panels:
+  - **plan:** the steps and their meters.
+  - **limits:** 5H, 7D, Codex and context as flat bars with their reset times, then your folder and git state.
+  - **timeline:** this turn's tool calls as bars over time, or the last turn's.
+  - **sessions:** your other Claude Code sessions, a row each: `?` needs you, `○` waiting, `◌` shell, `●` working.
+
+  A panel with nothing to show takes no room: no timeline before the first tool call, and no sessions while no other session is open.
+- **Type:**
+  - `/deck` closes it, or brings it to the front.
+  - `/deck plan`, `/deck limits`, `/deck timeline` or `/deck sessions` puts that panel on top.
+  - The old commands now lead into the Deck: `/band` shows limits, `/waterfall` the timeline and `/sessions` the sessions.
+- **Set:**
+  - `openOnStart` (on): open the Deck when a session starts.
+  - `panels` (`plan,limits,timeline,sessions`): which panels show, and in what order.
+- **Works with:**
+  - It needs `clean-view`, `status-band` and `tool-waterfall`, which lend it their panels.
+  - Closed, status-band's band comes back above the prompt, so nothing goes missing.
+  - It needs a fullscreen terminal at least 110 columns wide.
+  - The pet of the Sessions pane doesn't come along yet: while the Deck is loaded, Clawd stays away.
 
 ### 🧹 `clean-view`
 
@@ -75,7 +90,7 @@ Each card covers one mod: what it does, what to type and what you can set. Setti
 ### 📊 `status-band`
 
 - **What:** a `Status` tab in the side pane, with your 5H, 7D, Codex and context bars standing side by side, plus model, git, cost and reset times. Where the tab can't show, it becomes a band by the prompt. With `deck` loaded, the limits are the Deck's limits panel and the `Status` tab stays closed.
-- **Type:** `/band` brings the Status tab to the front. `/sessions` shows your other Claude Code sessions in a pane, with a pet under the list.
+- **Type:** `/band` brings the Status tab to the front. `/sessions` shows your other Claude Code sessions in a pane, with a pet under the list. With `deck` loaded, the sessions are the Deck's sessions panel, and the Sessions pane (and its pet) stays closed.
 - **The pet:** it sleeps while you're idle, walks while Claude works, hops when a turn ends, and stands under a `?` while Claude waits for you. The crab is Clawd.
 - **Set:** `tab` (on), `size` (`xsmall` to `xlarge`), `animate` (on), `position` (`above` or `below` the prompt), `pet` (`crab`, `cat`, `ghost`, `smiley` or `off`).
 
@@ -87,7 +102,7 @@ Each card covers one mod: what it does, what to type and what you can set. Setti
 ### 🌊 `tool-waterfall`
 
 - **What:** a chart of the turn's tool calls as bars over time, like the network tab in a browser.
-- **Type:** `/waterfall` opens it, and `/waterfall` again closes it. If you leave it open, it opens again in your next session.
+- **Type:** `/waterfall` opens it, and `/waterfall` again closes it. If you leave it open, it opens again in your next session. With `deck` loaded, the chart is the Deck's timeline panel, and `/waterfall` puts it on top.
 
 ### 🛑 `risky-hold`
 

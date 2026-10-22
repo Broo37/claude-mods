@@ -5,16 +5,32 @@
 // One run of a row: its text and how it is drawn. A color is a theme key or `rgb(r,g,b)`.
 export type DeckRun = { text: string; color?: string; backgroundColor?: string; isBold?: boolean; isDim?: boolean; isInverse?: boolean }
 
-// A lent panel: its title and what stands at its right, a label for the header, and rows.
-export type DeckPanel = { id: string; title: string; right: string; label: DeckRun[]; rows: DeckRun[][] }
+// A lent panel: its title and what stands at its right, a label for the header,
+// rows, and whether it moves on its own (a job or a turn that runs).
+export type DeckPanel = { id: string; title: string; right: string; label: DeckRun[]; rows: DeckRun[][]; isLive?: boolean }
 
 // The panels, in their own order.
-export const PANELS = ['plan', 'limits'] as const
+export const PANELS = ['plan', 'limits', 'timeline', 'sessions'] as const
+
+export type DeckPanelId = (typeof PANELS)[number]
 
 // Whose label comes first in the header: what the session runs on, then the job.
 const LABELS = ['limits', 'plan'] as const
 
 const SEPARATOR: DeckRun = { text: ' · ', isDim: true }
+
+const isPanelId = (id: string): id is DeckPanelId => (PANELS as readonly string[]).includes(id)
+
+// The panels the setting names, a comma between two, in its order; every
+// panel in its own order where it names none the Deck knows.
+export const panelsFrom = (setting: unknown): DeckPanelId[] => {
+  const named = (typeof setting === 'string' ? setting.split(',') : [])
+    .map(id => id.trim().toLowerCase())
+    .filter(isPanelId)
+  const once = [...new Set(named)]
+
+  return once.length > 0 ? once : [...PANELS]
+}
 
 export const orderOf = (ids: readonly string[], top: string | null): string[] =>
   top !== null && ids.includes(top) ? [top, ...ids.filter(id => id !== top)] : [...ids]

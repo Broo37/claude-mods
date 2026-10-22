@@ -11,7 +11,7 @@
     {
       "name": "deck",
       "source": "./deck",
-      "description": "One tab of the side pane for our mods: the plan and your limits as boxed panels, in place of the Steps and Status tabs"
+      "description": "One tab of the side pane for our mods: the plan, your limits, the turn and your sessions as boxed panels, in place of the Steps, Status, Waterfall and Sessions tabs"
     },
     {
       "name": "clean-view",
