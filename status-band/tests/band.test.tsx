@@ -1988,6 +1988,9 @@ const DECK: Plugin = {
     on('command.run', { command: 'limits' }, async ($, e) => ({
       text: JSON.stringify(await $.statusBand.panel({ id: 'limits', columns: Number(e.args) })),
     }))
+    on('command.run', { command: 'deck-sessions' }, async ($, e) => ({
+      text: JSON.stringify(await $.statusBand.panel({ id: 'sessions', columns: Number(e.args), rows: 8 })),
+    }))
     on('command.run', { command: 'host' }, async ($, e) => ({
       text: String(await $.statusBand.host({ by: 'deck', isDocked: e.args === 'docked' })),
     }))
@@ -2098,4 +2101,50 @@ test('/band says where the status is while a host has it', { plugins: [DECK] }, 
 
   expect(await $.command.run(BAND_CMD)).toEqual({ text: 'Status is in the Deck: /deck limits' })
   expect(world.panes).not.toContain('status')
+})
+
+const SESSIONS_CMD = { ...BAND_CMD, command: 'sessions' } as const
+
+test('lends the sessions panel through $.statusBand.panel', { plugins: [DECK] }, async ($, on) => {
+  const { world, clock } = boot(on)
+  world.files = { [`${TEAM_SESSIONS}/1.json`]: presence('s1', 'uat2-07', 'idle', NOW - MINUTE) }
+  await start($, clock)
+  await clock.advance(POLL)
+  const panel = JSON.parse((await ask($, 'deck-sessions', '43')).text) as StatusBandPanel
+
+  expect(panel.title).toBe('sessions')
+  expect(plainRows(panel.rows)[0]?.startsWith('○ uat2-07')).toBe(true)
+})
+
+test('a host keeps the Sessions pane from opening while other sessions are open', { plugins: [DECK] }, async ($, on) => {
+  const { world, clock } = boot(on)
+  world.files = { [`${TEAM_SESSIONS}/1.json`]: presence('s1', 'uat2-07', 'idle', NOW - MINUTE) }
+  await ask($, 'host', 'docked')
+  await start($, clock)
+  await clock.advance(POLL * 3)
+
+  expect(openedIds(world)).not.toContain('sessions')
+})
+
+test('a host closes the Sessions pane that is open', { plugins: [DECK] }, async ($, on) => {
+  const { world, clock } = boot(on)
+  world.files = { [`${TEAM_SESSIONS}/1.json`]: presence('s1', 'uat2-07', 'idle', NOW - MINUTE) }
+  await start($, clock)
+  await clock.advance(POLL)
+
+  expect(world.panes).toContain('sessions')
+
+  await ask($, 'host', 'docked')
+  await clock.advance(POLL * 3)
+
+  expect(world.panes).not.toContain('sessions')
+})
+
+test('/sessions says where the sessions are while a host has them', { plugins: [DECK] }, async ($, on) => {
+  const { world, clock } = boot(on)
+  await start($, clock)
+  await ask($, 'host', 'docked')
+
+  expect(await $.command.run(SESSIONS_CMD)).toEqual({ text: 'Sessions are in the Deck: /deck sessions' })
+  expect(world.panes).not.toContain('sessions')
 })

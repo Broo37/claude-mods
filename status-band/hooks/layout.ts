@@ -148,7 +148,7 @@ export const styleOf = (view: View) =>
   view.style === '' ? [] : [text('🎨 '), text(view.style, PALETTE.peach)]
 
 // `frames` is what the icon shows beat after beat, in a round, where it may move.
-type PeerState = { icon: string; frames?: string[]; word: string; color: Rgb; rank: number }
+export type PeerState = { icon: string; frames?: string[]; word: string; color: Rgb; rank: number }
 
 // What another session is doing, as its pane says it, and where it stands
 // among the others: the ones the person is needed at come first.
@@ -169,7 +169,7 @@ const PEER_STATES: Record<string, PeerState> = {
   busy: { icon: '⏳ ', word: 'working', color: PALETTE.peach, rank: 3 },
 }
 
-const stateOf = (peer: Peer): PeerState =>
+export const stateOf = (peer: Peer): PeerState =>
   peer.needs === ''
     ? (PEER_STATES[peer.status] ?? { icon: '', word: peer.status, color: PALETTE.subtext, rank: 4 })
     : ASKING

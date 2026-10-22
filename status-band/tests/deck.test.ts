@@ -2,7 +2,7 @@ import { expect, test } from 'claude-code/testing'
 
 import type { StatusBandRun, View } from '../types'
 import { PALETTE, rgb } from '../hooks/format'
-import { limitsPanelOf, runsOf } from '../hooks/deck'
+import { limitsPanelOf, runsOf, sessionsPanelOf } from '../hooks/deck'
 
 const MINUTE = 60_000
 const HOUR = 60 * MINUTE
@@ -146,4 +146,56 @@ test('runsOf keeps a text segment color as rgb() and turns a bar into colored ru
   expect(runs[0]).toEqual({ text: '5H', color: rgb(PALETTE.lavender), isBold: true })
   expect(runs.slice(1).map(run => run.text).join('')).toHaveLength(10)
   expect(runs.slice(1).every(run => run.color?.startsWith('rgb(') === true)).toBe(true)
+})
+
+// ── The sessions panel ─────────────────────────────────────────────────────
+
+const PEERS: View['peers'] = [
+  { id: 'a', name: 'claude-mods', status: 'busy', since: NOW - 4 * MINUTE, needs: '' },
+  { id: 'b', name: 'geisa-pk-sellout', status: 'idle', since: NOW - 29 * MINUTE, needs: '' },
+  { id: 'c', name: 'reset-cust-location', status: 'idle', since: NOW - 22 * MINUTE, needs: 'permission' },
+  { id: 'd', name: 'ta-geisa-prep', status: 'shell', since: NOW - 12 * MINUTE, needs: '' },
+]
+
+const sessionsAt = (view: View, columns: number, rows = 8) => sessionsPanelOf(view, columns, rows).rows.map(plain)
+
+test('sessions panel is titled sessions and says at its right how many are open', () => {
+  const panel = sessionsPanelOf({ ...VIEW, peers: PEERS }, 43, 8)
+
+  expect(panel).toMatchObject({ id: 'sessions', title: 'sessions', right: '4 open', label: [] })
+})
+
+test('lists a session a row, the one that needs you first, then by state as the Sessions pane ranks them', () => {
+  const rows = sessionsAt({ ...VIEW, peers: PEERS }, 43)
+
+  expect(rows).toHaveLength(4)
+  expect(rows[0]?.startsWith('? reset-cust-location')).toBe(true)
+  expect(rows[0]?.endsWith('needs you 22m')).toBe(true)
+  expect(rows.map(row => row.split(' ')[1])).toEqual(['reset-cust-location', 'geisa-pk-sellout', 'ta-geisa-prep', 'claude-mods'])
+})
+
+test('marks each session by its state', () => {
+  expect(sessionsAt({ ...VIEW, peers: PEERS }, 43).map(row => row[0])).toEqual(['?', '○', '◌', '●'])
+})
+
+test('keeps each session row exactly as wide as the panel, a long name cut', () => {
+  for (const columns of [36, 56]) {
+    for (const row of sessionsAt({ ...VIEW, peers: PEERS }, columns)) {
+      expect(row.length).toBe(columns)
+    }
+  }
+
+  expect(sessionsAt({ ...VIEW, peers: PEERS }, 30)[0]).toContain('…')
+})
+
+test('counts the sessions it has no room for on a last row', () => {
+  const rows = sessionsAt({ ...VIEW, peers: PEERS }, 43, 3)
+
+  expect(rows).toHaveLength(3)
+  expect(rows[2]).toBe('+2 more')
+})
+
+test('lends no session rows when no other session is open, or before anything is read', () => {
+  expect(sessionsAt({ ...VIEW, peers: [] }, 43)).toEqual([])
+  expect(sessionsAt({ ...VIEW, now: 0, peers: PEERS }, 43)).toEqual([])
 })

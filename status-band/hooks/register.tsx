@@ -4,7 +4,7 @@ import type { EngineInterface, FsEntry, Register, SessionUsage, Timer } from 'cl
 import type { Codex, Git, Limit, Peer, StatusBandHost, StatusBandPanel, View } from '../types'
 
 import { boxHeight, columnRows } from './column'
-import { limitsPanelOf } from './deck'
+import { limitsPanelOf, sessionsPanelOf } from './deck'
 import { PALETTE, barCells, barSpans, glintCells, rgb, spinnerCell } from './format'
 import type { BarKind, BarSpan } from './format'
 import { boardOf, boardRows, hasBeat, hintRest, hintShift, isAtWork, linesOf, positionOf, sizeOf } from './layout'
@@ -598,7 +598,7 @@ async function watchPeers($: EngineInterface) {
     }
 
     // Alone there is nothing to list, and the chat keeps its whole width.
-    if (peers.length > 0 && !isClosed && !hasOpenedBoard) {
+    if (peers.length > 0 && !isClosed && !hasOpenedBoard && (await hostOf($)) === null) {
       hasOpenedBoard = true
       void $.ui.open(BOARD)
     }
@@ -942,10 +942,15 @@ export const register: Register = (on, options) => {
     return { ...built, statusBand: { panel: async () => UNLENT, host: async () => false } }
   })
 
-  on('statusBand.panel', async ($, e) => ({ value: limitsPanelOf(await read($, view), e.columns) }))
+  on('statusBand.panel', async ($, e) => {
+    const shown = await read($, view)
 
-  // Hosted, the Status tab closes and stays closed, and the band redraws to
-  // give way to the host's pane or to stand in for it.
+    return { value: e.id === 'sessions' ? sessionsPanelOf(shown, e.columns, e.rows ?? 8) : limitsPanelOf(shown, e.columns) }
+  })
+
+  // Hosted, the Status tab and the Sessions pane close and stay closed (and
+  // with that pane the pet, while the Deck has no room for it), and the band
+  // redraws to give way to the host's pane or to stand in for it.
   on('statusBand.host', async ($, e) => {
     hosted = { by: e.by, isDocked: e.isDocked }
     await update($, hostAtom, () => hosted)
@@ -954,6 +959,11 @@ export const register: Register = (on, options) => {
       hasOpenedStatus = false
       isTabDrawn = false
       await $.ui.close({ id: STATUS.id })
+    }
+
+    if ((await $.ui.panes()).some(pane => pane.id === BOARD.id)) {
+      hasOpenedBoard = false
+      await $.ui.close({ id: BOARD.id })
     }
 
     $.ui.invalidate('ui.render')
@@ -986,6 +996,10 @@ export const register: Register = (on, options) => {
   })
 
   on('command.run', { command: 'sessions' }, async $ => {
+    if ((await hostOf($)) !== null) {
+      return { text: 'Sessions are in the Deck: /deck sessions' }
+    }
+
     await update($, view, last => ({ ...last, isBoardClosed: false }))
 
     // Asked for while it is a tab behind another pane, it is asked for to be

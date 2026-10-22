@@ -2,7 +2,7 @@ import type { StatusBandPanel, StatusBandRun, View } from '../types'
 
 import { PALETTE, barCells, barSpans, cost, duration, modelName, resetClock, resetDate, rgb, shortPath } from './format'
 import type { BarKind, Rgb } from './format'
-import { bold, readingsOf, text } from './layout'
+import { bold, readingsOf, stateOf, text } from './layout'
 import type { Segment } from './layout'
 
 // The limits as a panel of the Deck: one flat bar a row, all starting and
@@ -157,4 +157,40 @@ export const limitsPanelOf = (view: View, columns: number): StatusBandPanel => {
     label: labelOf(view),
     rows: [...waiting, ...bars.map(row => runsOf(barLine(row, width))), placeOf(view, columns)],
   }
+}
+
+// What marks a session in the Deck, by its rank among the states: one cell,
+// where the Sessions pane has an emoji. Needs you, waiting, shell, working.
+const MARKS = ['?', '○', '◌', '●']
+
+// The other sessions as a panel of the Deck: a row a session, ranked as the
+// Sessions pane ranks them, its mark, its name and, at the right, what it is
+// doing and since when. None open, or nothing read yet: no rows.
+export const sessionsPanelOf = (view: View, columns: number, rows: number): StatusBandPanel => {
+  const panel: StatusBandPanel = { id: 'sessions', title: 'sessions', right: `${view.peers.length} open`, label: [], rows: [] }
+
+  if (view.now === 0 || view.peers.length === 0) {
+    return panel
+  }
+
+  const ranked = [...view.peers].sort((a, b) => stateOf(a).rank - stateOf(b).rank || b.since - a.since)
+  const room = Math.max(1, rows)
+  const shown = ranked.length > room ? ranked.slice(0, room - 1) : ranked
+  const lines = shown.map((peer): StatusBandRun[] => {
+    const state = stateOf(peer)
+    const ink = rgb(state.color)
+    const doing = `${state.word} ${duration(Math.max(0, view.now - peer.since))}`
+    const space = Math.max(1, columns - 2 - doing.length - 1)
+    const name = peer.name.length > space ? `${peer.name.slice(0, Math.max(0, space - 1))}…` : peer.name
+
+    return [
+      { text: `${MARKS[state.rank] ?? '·'} `, color: ink },
+      { text: name, color: rgb(PALETTE.subtext), isBold: true },
+      { text: ' '.repeat(Math.max(1, columns - 2 - name.length - doing.length)) },
+      { text: doing, color: ink },
+    ]
+  })
+  const more = ranked.length - shown.length
+
+  return { ...panel, rows: more > 0 ? [...lines, [{ text: `+${more} more`, isDim: true }]] : lines }
 }
