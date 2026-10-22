@@ -55,6 +55,10 @@ export type CleanViewTab = 'checklist' | 'status'
 // One run of a lent panel's row: its text, and its color as a theme key.
 export type CleanViewRun = { text: string; color?: string; isBold?: boolean; isDim?: boolean; isInverse?: boolean }
 
+// A step as a stop on a route a host draws: its name, Claude's emoji for it,
+// where it stands, and how far it is.
+export type CleanViewStop = { name: string; icon: string; status: CleanViewStatus; percent: number; hasReported: boolean }
+
 // The checklist as a panel another mod draws in a box of its own (the Deck): a
 // title and what stands at its right, a label for that mod's header, and rows.
 export type CleanViewPanel = {
@@ -67,6 +71,10 @@ export type CleanViewPanel = {
   isLive?: boolean
   // The panel in one line, for a host's mini summary.
   summary?: CleanViewRun[]
+  // The job's name, its phase, and its steps as stops, for a host that draws them its own way.
+  name?: string
+  phase?: CleanViewPhase
+  stops?: CleanViewStop[]
 }
 
 // The mod that hosts the checklist, and whether its pane is in the dock now.

@@ -441,7 +441,7 @@ export const labelOf = (list: Checklist, now: number): Run[] => {
   const started = list.startedAt ?? now
   const at = list.tasks.findIndex(task => task.status === 'active')
   const done = list.tasks.filter(step => step.status === 'done').length
-  const count = list.tasks.length === 0 ? '' : `${at >= 0 ? at + 1 : done}/${list.tasks.length} · `
+  const count = list.tasks.length === 0 ? '' : `stop ${at >= 0 ? at + 1 : done} of ${list.tasks.length} · `
 
   switch (list.phase) {
     case 'idle':
@@ -484,4 +484,16 @@ export const planPanelOf = (list: Checklist, now: number, columns: number, tick:
   rows: list.phase === 'idle' ? [] : paneLinesOf(list, now, columns, tick),
   isLive: list.phase === 'working' || list.phase === 'needs-you',
   summary: summaryOf(list, now),
+  name: list.title,
+  phase: list.phase,
+  stops:
+    list.phase === 'idle'
+      ? []
+      : list.tasks.map(task => ({
+          name: task.name,
+          icon: iconOf(task),
+          status: task.status,
+          percent: task.percent,
+          hasReported: task.hasReported,
+        })),
 })

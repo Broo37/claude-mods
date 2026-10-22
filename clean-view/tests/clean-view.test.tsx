@@ -1582,7 +1582,7 @@ test('lends its checklist to another mod as the plan panel', { plugins: [DECK] }
   const panel = JSON.parse((await deck($, 'deck-plan', '30')).text) as Lent
 
   expect(panel.title).toBe('plan')
-  expect(panel.label.map(run => run.text).join('')).toBe('▶ 1/4 · 0s')
+  expect(panel.label.map(run => run.text).join('')).toBe('▶ stop 1 of 4 · 0s')
   expect(panel.rows.map(row => row.map(run => run.text).join('')).slice(0, 2)).toEqual(['Build bakery landing page', '▶ Working · 0s'])
 })
 

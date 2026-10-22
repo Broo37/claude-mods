@@ -413,7 +413,7 @@ test("names the dock's tab short enough to stay beside Waterfall, Sessions and S
 // ── Lent to the Deck ────────────────────────────────────────────────────────
 
 test("labels the job for the Deck's header by its state", () => {
-  expect(textOf(labelOf(halfway(), NOW + 72_000))).toBe('▶ 2/4 · 1m 12s')
+  expect(textOf(labelOf(halfway(), NOW + 72_000))).toBe('▶ stop 2 of 4 · 1m 12s')
   expect(textOf(labelOf(finished(), NOW + 200_000))).toBe('✓ done · 2m 14s')
   expect(textOf(labelOf(needsYou(planned(), REASONS.ok), NOW))).toBe('? needs you')
   expect(textOf(labelOf(stuck(planned(), REASONS.failing), NOW))).toBe('! stuck')
@@ -456,4 +456,22 @@ test('sums the plan up in one line: the step at work, else what the header says'
 
 test('lends no summary line while there is no job, so the mini summary does not repeat its header', () => {
   expect(planPanelOf(IDLE, NOW, 43, 0).summary).toEqual([])
+})
+
+test('lends the steps as stops for a route: name, emoji, where each stands, and the job as the line name', () => {
+  const panel = planPanelOf(halfway(), NOW + 72_000, 43, 0)
+
+  expect(panel.name).toBe('Build my landing page')
+  expect(panel.stops).toEqual([
+    // Passed when a later step reported, without a report of its own.
+    { name: 'Read your brand notes', icon: '📖', status: 'done', percent: 100, hasReported: false },
+    { name: 'Build the pricing section', icon: '🔨', status: 'active', percent: 60, hasReported: true },
+    { name: 'Add the contact form', icon: '🔨', status: 'upcoming', percent: 0, hasReported: false },
+    { name: 'Polish the footer', icon: '🎨', status: 'upcoming', percent: 0, hasReported: false },
+  ])
+  expect(panel.phase).toBe('working')
+})
+
+test('lends no stops while there is no job', () => {
+  expect(planPanelOf(IDLE, NOW, 43, 0).stops).toEqual([])
 })
