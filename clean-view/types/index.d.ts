@@ -65,6 +65,8 @@ export type CleanViewPanel = {
   rows: CleanViewRun[][]
   // Whether the panel moves on its own: a job that runs, or waits on the person.
   isLive?: boolean
+  // The panel in one line, for a host's mini summary.
+  summary?: CleanViewRun[]
 }
 
 // The mod that hosts the checklist, and whether its pane is in the dock now.

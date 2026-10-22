@@ -49,3 +49,8 @@ test('keeps within the rows asked for, the oldest calls under +N earlier', () =>
   expect(rows.length).toBeLessThanOrEqual(10)
   expect(rows.some(row => /^\+\d+ earlier$/.test(row))).toBe(true)
 })
+
+test('sums the turn up in one line', () => {
+  expect(plain([timelinePanelOf(RUNNING, 41_000, 43, 10).summary ?? []])).toEqual(['turn 41s… · 2 tools'])
+  expect(timelinePanelOf(null, 0, 43, 10).summary).toEqual([])
+})

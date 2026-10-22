@@ -459,6 +459,21 @@ export const labelOf = (list: Checklist, now: number): Run[] => {
   }
 }
 
+// The job in one line: the step at work while it works, else what the Deck's
+// header says; nothing while there is no job, which the header says already.
+const summaryOf = (list: Checklist, now: number): Run[] => {
+  if (list.phase === 'idle') {
+    return []
+  }
+
+  const at = list.tasks.findIndex(task => task.status === 'active')
+  const task = list.tasks[at]
+
+  return list.phase === 'working' && task !== undefined
+    ? [{ text: `▶ ${at + 1}/${list.tasks.length} ` }, { text: task.name, isBold: true }]
+    : labelOf(list, now)
+}
+
 // The checklist as a panel of the Deck: the Steps tab's own lines, and none
 // while there is no job, so the Deck leaves the panel out.
 export const planPanelOf = (list: Checklist, now: number, columns: number, tick: number): CleanViewPanel => ({
@@ -468,4 +483,5 @@ export const planPanelOf = (list: Checklist, now: number, columns: number, tick:
   label: labelOf(list, now),
   rows: list.phase === 'idle' ? [] : paneLinesOf(list, now, columns, tick),
   isLive: list.phase === 'working' || list.phase === 'needs-you',
+  summary: summaryOf(list, now),
 })

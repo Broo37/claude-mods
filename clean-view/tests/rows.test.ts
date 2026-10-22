@@ -448,3 +448,12 @@ test('marks the plan panel live while a job runs or waits on the person, and sti
   expect(planPanelOf(finished(), NOW, 43, 0).isLive).toBe(false)
   expect(planPanelOf(IDLE, NOW, 43, 0).isLive).toBe(false)
 })
+
+test('sums the plan up in one line: the step at work, else what the header says', () => {
+  expect(textOf(planPanelOf(halfway(), NOW + 72_000, 43, 0).summary ?? [])).toBe('▶ 2/4 Build the pricing section')
+  expect(textOf(planPanelOf(finished(), NOW + 200_000, 43, 0).summary ?? [])).toBe('✓ done · 2m 14s')
+})
+
+test('lends no summary line while there is no job, so the mini summary does not repeat its header', () => {
+  expect(planPanelOf(IDLE, NOW, 43, 0).summary).toEqual([])
+})

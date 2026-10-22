@@ -12,18 +12,12 @@ export const timelinePanelOf = (turn: Turn | null, elapsed: number, columns: num
   const title = isLive ? 'this turn' : 'last turn'
 
   if (turn === null || turn.calls.length === 0) {
-    return { id: 'timeline', title, right: '', label: [], rows: [], isLive }
+    return { id: 'timeline', title, right: '', label: [], rows: [], isLive, summary: [] }
   }
 
   // The chart counts its heading among its rows.
   const [heading = [], ...body] = linesOf(turn, elapsed, columns, rows + 1)
+  const right = heading.map(run => run.text).join('').replace(/^Turn /, '')
 
-  return {
-    id: 'timeline',
-    title,
-    right: heading.map(run => run.text).join('').replace(/^Turn /, ''),
-    label: [],
-    rows: body,
-    isLive,
-  }
+  return { id: 'timeline', title, right, label: [], rows: body, isLive, summary: [{ text: `turn ${right}` }] }
 }

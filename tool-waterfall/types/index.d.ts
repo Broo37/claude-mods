@@ -11,6 +11,8 @@ export type ToolWaterfallPanel = {
   label: ToolWaterfallRun[]
   rows: ToolWaterfallRun[][]
   isLive: boolean
+  // The panel in one line, for a host's mini summary.
+  summary?: ToolWaterfallRun[]
 }
 
 // The mod that hosts the chart, and whether its pane is in the dock now.
