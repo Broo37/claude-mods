@@ -52,8 +52,36 @@ export type CleanViewChecklist = {
 // band too: the checklist, or that mod's band.
 export type CleanViewTab = 'checklist' | 'status'
 
+// One run of a lent panel's row: its text, and its color as a theme key.
+export type CleanViewRun = { text: string; color?: string; isBold?: boolean; isDim?: boolean; isInverse?: boolean }
+
+// The checklist as a panel another mod draws in a box of its own (the Deck): a
+// title and what stands at its right, a label for that mod's header, and rows.
+export type CleanViewPanel = { id: 'plan'; title: string; right: string; label: CleanViewRun[]; rows: CleanViewRun[][] }
+
+// The mod that hosts the checklist, and whether its pane is in the dock now.
+export type CleanViewHost = { by: string; isDocked: boolean }
+
+// What Clean View lends another mod: its checklist as a panel, and a way to
+// host it, so the Steps tab stands aside.
+export type CleanView = {
+  panel(args: { id: 'plan'; columns: number }): Promise<CleanViewPanel>
+  host(args: CleanViewHost): Promise<boolean>
+}
+
 declare module 'claude-code' {
+  interface EngineInterface {
+    cleanView: CleanView
+  }
+
   interface PluginState {
-    'clean-view': { cleanViewEnabled: boolean; checklist: CleanViewChecklist; tick: number; tab: CleanViewTab; opened: string[] }
+    'clean-view': {
+      cleanViewEnabled: boolean
+      checklist: CleanViewChecklist
+      tick: number
+      tab: CleanViewTab
+      opened: string[]
+      host: CleanViewHost | null
+    }
   }
 }

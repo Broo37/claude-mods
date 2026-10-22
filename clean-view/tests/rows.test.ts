@@ -1,7 +1,7 @@
 import { expect, test } from 'claude-code/testing'
 
 import { IDLE, REASONS, actionEnded, actionStarted, endTurn, needsYou, planSteps, reportProgress, startJob, stuck } from '../hooks/checklist'
-import { BUTTON, DOCK_TAB, TAB_MARKS, bandStepsOf, durationOf, headerOf, paneLinesOf, rowsOf, stripOf } from '../hooks/rows'
+import { BUTTON, DOCK_TAB, TAB_MARKS, bandStepsOf, durationOf, headerOf, labelOf, paneLinesOf, planPanelOf, rowsOf, stripOf } from '../hooks/rows'
 import type { Run } from '../hooks/rows'
 import type { CleanViewChecklist } from '../types'
 
@@ -408,4 +408,36 @@ test("names the dock's tab short enough to stay beside Waterfall, Sessions and S
 
   // The name it had fell off the left.
   expect(tabRowOf(['Checklist ▶', 'Waterfall', 'Sessions', 'Status'])).toBeGreaterThan(TAB_ROW)
+})
+
+// ── Lent to the Deck ────────────────────────────────────────────────────────
+
+test("labels the job for the Deck's header by its state", () => {
+  expect(textOf(labelOf(halfway(), NOW + 72_000))).toBe('▶ 2/4 · 1m 12s')
+  expect(textOf(labelOf(finished(), NOW + 200_000))).toBe('✓ done · 2m 14s')
+  expect(textOf(labelOf(needsYou(planned(), REASONS.ok), NOW))).toBe('? needs you')
+  expect(textOf(labelOf(stuck(planned(), REASONS.failing), NOW))).toBe('! stuck')
+  expect(textOf(labelOf(endTurn(planned(), { reason: 'aborted', answer: '' }, NOW + 9000), NOW + 20_000))).toBe('■ stopped')
+  expect(textOf(labelOf(IDLE, NOW))).toBe('idle')
+})
+
+test('lends no rows while there is no job, so the Deck hides the panel', () => {
+  const panel = planPanelOf(IDLE, NOW, 43, 0)
+
+  expect(panel).toMatchObject({ id: 'plan', title: 'plan', right: '' })
+  expect(panel.rows).toEqual([])
+})
+
+test("lends the Steps tab's own lines while a job runs", () => {
+  for (const columns of [36, 56]) {
+    expect(planPanelOf(halfway(), NOW + 72_000, columns, 3).rows).toEqual(paneLinesOf(halfway(), NOW + 72_000, columns, 3))
+  }
+})
+
+test("keeps the plan panel's rows within its width", () => {
+  for (const columns of [36, 56]) {
+    for (const row of planPanelOf(halfway(), NOW + 72_000, columns, 0).rows) {
+      expect(textOf(row).length).toBeLessThanOrEqual(columns)
+    }
+  }
 })

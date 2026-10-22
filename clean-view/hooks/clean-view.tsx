@@ -27,10 +27,10 @@ import {
 } from './checklist'
 import type { TaskChange, Todo } from './checklist'
 import { cleanName, cleanTitle } from './names'
-import { BUTTON, DOCK_TAB, NO_JOB, TABS, TAB_MARKS, bandStepsOf, headerOf, paneLinesOf, stripOf } from './rows'
+import { BUTTON, DOCK_TAB, NO_JOB, TABS, TAB_MARKS, bandStepsOf, headerOf, paneLinesOf, planPanelOf, stripOf } from './rows'
 import type { Run } from './rows'
 import { NAMER, PLAN_FIRST, PLAN_STEPS, PLAN_TOOL, PROGRESS_TOOL, REPORT_PROGRESS, SECTION } from './words'
-import type { CleanViewChecklist as Checklist, CleanViewTab as Tab } from '../types'
+import type { CleanViewChecklist as Checklist, CleanViewHost, CleanViewPanel, CleanViewTab as Tab } from '../types'
 
 // Clean View: while it is on, the transcript keeps Claude's written replies and
 // loses its tool calls, and a checklist above the prompt says what the job is,
@@ -41,6 +41,11 @@ const checklist = atom({ plugin: 'clean-view', key: 'checklist' } as const, IDLE
 const tick = atom({ plugin: 'clean-view', key: 'tick' } as const, 0)
 const tab = atom({ plugin: 'clean-view', key: 'tab' } as const, 'checklist')
 const opened = atom({ plugin: 'clean-view', key: 'opened' } as const, [] as string[])
+
+// The mod that hosts the checklist (the Deck), if one does: then the Steps tab
+// stands aside. Kept in the session's state, which outlasts a reload, and here,
+// which outlasts a /clear that empties the state.
+const hostAtom = atom({ plugin: 'clean-view', key: 'host' } as const, null as CleanViewHost | null)
 
 // Under what names the setting and the tab in front are kept between sessions.
 const KEPT = 'enabled'
@@ -106,6 +111,11 @@ let calls = 0
 // The title the Steps tab was last given.
 let shownTitle: string | null = null
 
+let hosted: CleanViewHost | null = null
+
+// The panel a lent method answers where no hook of this mod does: no rows, so a host hides it.
+const UNLENT: CleanViewPanel = { id: 'plan', title: 'plan', right: '', label: [], rows: [] }
+
 const lookOf = (run: Run) => ({
   wrap: 'truncate-end' as const,
   ...(run.color !== undefined && { color: run.color }),
@@ -166,7 +176,18 @@ function keepTime($: EngineInterface, list: Checklist) {
 // The tab's title carries the job's state, to be read while another tab is in front.
 const titleOf = (list: Checklist) => `${PANE.title}${TAB_MARKS[list.phase]}`
 
+async function hostOf($: EngineInterface) {
+  hosted ??= await read($, hostAtom)
+
+  return hosted
+}
+
+// The tab opens unless a host shows the checklist in its own pane.
 async function openTab($: EngineInterface) {
+  if ((await hostOf($)) !== null) {
+    return
+  }
+
   shownTitle = titleOf(await read($, checklist))
   await $.ui.open({ ...PANE, title: shownTitle })
 }
@@ -342,6 +363,31 @@ async function flip($: EngineInterface) {
 }
 
 export const registerCleanView = (on: On): void => {
+  // What Clean View lends another mod, the Deck: the checklist as a panel, and
+  // a way to host it. The methods here stand at the bottom of their events; the
+  // hooks below answer them, holding `$` as a method cannot.
+  on('engine.create', async ($, e, next) => {
+    const built = await next(e)
+
+    return { ...built, cleanView: { panel: async () => UNLENT, host: async () => false } }
+  })
+
+  on('cleanView.panel', async ($, e) => {
+    const list = (await read($, enabled)) ? await read($, checklist) : IDLE
+
+    return { value: planPanelOf(list, await $.clock.now(), e.columns, await read($, tick)) }
+  })
+
+  // Hosted, the Steps tab closes and stays closed; the checklist above the
+  // prompt stays as it is.
+  on('cleanView.host', async ($, e) => {
+    hosted = { by: e.by, isDocked: e.isDocked }
+    await update($, hostAtom, () => hosted)
+    await closeTab($)
+
+    return { value: true }
+  })
+
   on('session.start', async ($, e, next) => {
     // Its tools say "call me first": a session nobody watches is not offered them.
     if (await isWatched($)) {

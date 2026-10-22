@@ -1,5 +1,5 @@
 import { iconOf } from './icons'
-import type { CleanViewAction as Action, CleanViewChecklist as Checklist, CleanViewTask as Task } from '../types'
+import type { CleanViewAction as Action, CleanViewChecklist as Checklist, CleanViewPanel, CleanViewTask as Task } from '../types'
 
 // What the band shows of a checklist, as runs of text with a theme color, bold,
 // dim or inverse: the header's line, a row a step, and under a step the person
@@ -435,3 +435,36 @@ export const stripOf = (list: Checklist, now: number, columns: number, tick: num
       ]
   }
 }
+
+// What the Deck's header says of the job: where it is and for how long, or what holds it.
+export const labelOf = (list: Checklist, now: number): Run[] => {
+  const started = list.startedAt ?? now
+  const at = list.tasks.findIndex(task => task.status === 'active')
+  const done = list.tasks.filter(step => step.status === 'done').length
+  const count = list.tasks.length === 0 ? '' : `${at >= 0 ? at + 1 : done}/${list.tasks.length} · `
+
+  switch (list.phase) {
+    case 'idle':
+      return [{ text: 'idle', isDim: true }]
+    case 'working':
+      return [{ text: `▶ ${count}${durationOf(now - started)}` }]
+    case 'needs-you':
+      return [{ text: '? needs you', color: 'warning' }]
+    case 'stuck':
+      return [{ text: '! stuck', color: 'warning' }]
+    case 'stopped':
+      return [{ text: '■ stopped', color: 'error' }]
+    case 'done':
+      return [{ text: `✓ done · ${durationOf((list.finishedAt ?? now) - started)}`, color: 'success' }]
+  }
+}
+
+// The checklist as a panel of the Deck: the Steps tab's own lines, and none
+// while there is no job, so the Deck leaves the panel out.
+export const planPanelOf = (list: Checklist, now: number, columns: number, tick: number): CleanViewPanel => ({
+  id: 'plan',
+  title: 'plan',
+  right: '',
+  label: labelOf(list, now),
+  rows: list.phase === 'idle' ? [] : paneLinesOf(list, now, columns, tick),
+})

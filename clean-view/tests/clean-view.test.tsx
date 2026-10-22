@@ -1,5 +1,5 @@
 import { expect, mock, test } from 'claude-code/testing'
-import type { Engine, MockClock } from 'claude-code/testing'
+import type { Engine, MockClock, Plugin } from 'claude-code/testing'
 import type { ModelCompleteInput, On, ToolCallResult } from 'claude-code'
 
 // A Thursday morning, local time.
@@ -1551,4 +1551,95 @@ test('keeps the Checklist tab a plain list: no arrows, nothing of what a step di
 
   expect(lines[3]).toBe('▶ 📖 Read your brand notes')
   expect(lines.some(line => line.includes('List the files') || line.includes('▸') || line.includes('▾'))).toBe(false)
+})
+
+// ── Lent to the Deck ────────────────────────────────────────────────────────
+
+// A stand-in for the Deck: it asks for the plan panel on a command, and hosts
+// Clean View on another, answering with what it got back.
+const DECK: Plugin = {
+  name: 'deck',
+  register(on) {
+    on('command.run', { command: 'deck-plan' }, async ($, e) => ({
+      text: JSON.stringify(await $.cleanView.panel({ id: 'plan', columns: Number(e.args) })),
+    }))
+    on('command.run', { command: 'deck-host' }, async ($, e) => ({
+      text: String(await $.cleanView.host({ by: 'deck', isDocked: e.args === 'docked' })),
+    }))
+  },
+}
+
+const deck = async ($: Engine, command: string, args = '') =>
+  (await $.command.run({ command, args, origin: { kind: 'composer' }, presentation: { isFullscreen: true, columns: 150 } })) as { text: string }
+
+type Lent = { id: string; title: string; right: string; label: { text: string }[]; rows: { text: string }[][] }
+
+test('lends its checklist to another mod as the plan panel', { plugins: [DECK] }, async ($, on) => {
+  const { clock } = docked(on)
+  await start($, clock)
+  await ask($, clock)
+  await plan($)
+  const panel = JSON.parse((await deck($, 'deck-plan', '30')).text) as Lent
+
+  expect(panel.title).toBe('plan')
+  expect(panel.label.map(run => run.text).join('')).toBe('▶ 1/4 · 0s')
+  expect(panel.rows.map(row => row.map(run => run.text).join('')).slice(0, 2)).toEqual(['Build bakery landing page', '▶ Working · 0s'])
+})
+
+test('answers a host with true', { plugins: [DECK] }, async ($, on) => {
+  const { clock } = docked(on)
+  await start($, clock)
+
+  expect((await deck($, 'deck-host', 'docked')).text).toBe('true')
+})
+
+test('a host keeps the Steps tab from opening as the session starts', { plugins: [DECK] }, async ($, on) => {
+  const { world, clock } = docked(on)
+  await deck($, 'deck-host', 'docked')
+  await start($, clock)
+
+  expect(world.opened).toEqual([])
+})
+
+test('a host closes the Steps tab that is open', { plugins: [DECK] }, async ($, on) => {
+  const { world, clock } = docked(on)
+  await start($, clock)
+
+  expect(world.panes).toEqual(['checklist'])
+
+  await deck($, 'deck-host', 'docked')
+
+  expect(world.panes).toEqual([])
+})
+
+test('/simple on does not open the Steps tab while a host has the checklist', { plugins: [DECK] }, async ($, on) => {
+  const { world, clock } = docked(on)
+  await start($, clock)
+  await deck($, 'deck-host', 'docked')
+  await simple($, 'off')
+  await simple($, 'on')
+
+  expect(world.panes).toEqual([])
+})
+
+test('keeps the checklist above the prompt while a host has it', { plugins: [DECK] }, async ($, on) => {
+  const { clock } = docked(on)
+  await start($, clock)
+  await ask($, clock)
+  await plan($)
+  const before = textOf(await bandTree($))
+  await deck($, 'deck-host', 'docked')
+
+  expect(textOf(await bandTree($))).toBe(before)
+})
+
+test('a host outlasts /clear', { plugins: [DECK] }, async ($, on) => {
+  const { world, clock } = docked(on)
+  on('classic.SessionStart', () => ({}))
+  await start($, clock)
+  await deck($, 'deck-host', 'docked')
+  await $.classic.SessionStart({ source: 'clear' })
+  await simple($, 'on')
+
+  expect(world.panes).toEqual([])
 })
