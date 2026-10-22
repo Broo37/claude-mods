@@ -1,10 +1,11 @@
 # claude-mods
 
-Mods for [Claude Code](https://claude.com/claude-code): plugins of function hooks that change how a session looks and behaves. There are ten, and each one installs on its own. Install the ones you want, then find each one's card in the [cheat sheet](#cheat-sheet).
+Mods for [Claude Code](https://claude.com/claude-code): plugins of function hooks that change how a session looks and behaves. There are eleven. Install the ones you want, then find each one's card in the [cheat sheet](#cheat-sheet). Each installs on its own except two: `confetti` needs `clean-view`, and `deck` needs `clean-view` and `status-band`.
 
 | Mod | In one line |
 | --- | --- |
 | [`confetti`](#-confetti) | A burst of pixel confetti when a job ends as All done |
+| [`deck`](#️-deck) | The plan and your limits in one tab of boxed panels |
 | [`clean-view`](#-clean-view) | Hides Claude's tool calls and shows its plan as a checklist |
 | [`fold-view`](#-fold-view) | Folds every tool call to one line a click opens |
 | [`status-band`](#-status-band) | Model, git, cost and your usage limits as bars, plus a pet |
@@ -36,6 +37,7 @@ claude --plugin-dir path/to/claude-mods/clean-view
 To load several from folders, list them in `CLAUDE_CODE_PLUGIN_DIRS` (under `env` in `settings.json`, `;` between them on Windows) in the order of the table above. The first folder is the outermost hook, and the order matters:
 
 - `confetti` comes first, even before `clean-view`: its burst goes on top of the checklist Clean View draws above the prompt. Listed after it, Clean View would take the burst for another mod's band and make a tab of it.
+- `deck` comes right after `confetti`, before `clean-view`. A mod is always loaded above the mods it needs, so listed after `clean-view` it would pull `clean-view` down below `fold-view`, and folded rows would show while Clean View is on.
 - `clean-view` comes next: it wraps the band `status-band` draws and the pane `tool-waterfall` draws, and its hidden rows have to win over the badges of `transcript-makeover`.
 - `fold-view` comes right after it: it folds the rows Clean View lets through while off, and its folded lines have to win over the badges of `transcript-makeover` too.
 - `status-band`, `transcript-makeover` and `tool-waterfall` come before `risky-hold`: a command it refuses never reaches a mod listed after it, so the mods that count and time calls would miss it.
@@ -49,6 +51,13 @@ Each card covers one mod: what it does, what to type and what you can set. Setti
 - **What:** a second and a half of colored pixel confetti right above the checklist, each time a Clean View job ends as **All done**. When a job is stopped, stuck or waiting for you, nothing plays.
 - **Type:** `/confetti` plays it whenever you like.
 - **Works with:** it needs `clean-view`, since it plays on Clean View's All done, so with Clean View off only `/confetti` plays it.
+
+### 🗂️ `deck`
+
+- **What:** one tab of the side pane, `Deck`, in place of Clean View's `Steps` tab and status-band's `Status` tab. A header line names the model and the job's state (`DECK · Opus 5.5 xhigh · ▶ 2/4 · 1m 12s`), and under it boxed panels: **plan** (the steps and their meters) and **limits** (5H, 7D, Codex and context as flat bars with their reset times, then your folder and git state). A panel with nothing to show takes no room.
+- **Type:** `/deck` to close it or bring it to the front, `/deck limits` or `/deck plan` to put that panel on top.
+- **Set:** `openOnStart` (on): open the Deck when a session starts.
+- **Works with:** it needs `clean-view` and `status-band`, which lend it their panels. Closed, status-band's band comes back above the prompt, so nothing goes missing. It needs a fullscreen terminal at least 110 columns wide.
 
 ### 🧹 `clean-view`
 
@@ -65,7 +74,7 @@ Each card covers one mod: what it does, what to type and what you can set. Setti
 
 ### 📊 `status-band`
 
-- **What:** a `Status` tab in the side pane, with your 5H, 7D, Codex and context bars standing side by side, plus model, git, cost and reset times. Where the tab can't show, it becomes a band by the prompt.
+- **What:** a `Status` tab in the side pane, with your 5H, 7D, Codex and context bars standing side by side, plus model, git, cost and reset times. Where the tab can't show, it becomes a band by the prompt. With `deck` loaded, the limits are the Deck's limits panel and the `Status` tab stays closed.
 - **Type:** `/band` brings the Status tab to the front. `/sessions` shows your other Claude Code sessions in a pane, with a pet under the list.
 - **The pet:** it sleeps while you're idle, walks while Claude works, hops when a turn ends, and stands under a `?` while Claude waits for you. The crab is Clawd.
 - **Set:** `tab` (on), `size` (`xsmall` to `xlarge`), `animate` (on), `position` (`above` or `below` the prompt), `pet` (`crab`, `cat`, `ghost`, `smiley` or `off`).
@@ -127,6 +136,7 @@ A step with a `▸` opens at a click to what Claude did in it: its one-line note
 - In a fullscreen terminal the checklist is also a tab of the side pane, `Steps`, beside `Waterfall`, `Sessions` and `Status` where those mods are loaded: a plain list, no step opens there. The pane is narrow, so each step has a line of its own and the step at work its meter under it. The tab's title carries the job's state (`Steps ▶`, `Steps ✓`), so it reads from behind another tab. Its name is short so that all four tabs fit a side pane 47 columns wide: the terminal drops the tabs left of the one in front that do not fit.
 - Over the `tool-waterfall` chart it draws two lines of status: the step at work with its count (`▶ 2/4 🔨 Build the pricing section`), then its meter and the time.
 - Where another mod draws above the prompt too, the two share the space as tabs, `[ Checklist ]  Status`.
+- With `deck` loaded, the `Steps` tab stays closed: the steps are the Deck's plan panel. The checklist above the prompt stays as it is.
 
 ### How it works
 

@@ -9,6 +9,11 @@
       "description": "A second and a half of colored pixel confetti above the checklist each time a Clean View job ends as All done, and on /confetti"
     },
     {
+      "name": "deck",
+      "source": "./deck",
+      "description": "One tab of the side pane for our mods: the plan and your limits as boxed panels, in place of the Steps and Status tabs"
+    },
+    {
       "name": "clean-view",
       "source": "./clean-view",
       "description": "Hides tool calls, diffs and command output while Claude works, and shows the plan as a checklist above the prompt"
