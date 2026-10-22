@@ -212,3 +212,33 @@ test('sums the sessions up in one line, saying how many need you', () => {
   expect(plain(sessionsPanelOf({ ...VIEW, peers: PEERS }, 43, 8).summary ?? [])).toBe('4 open · 1 needs you')
   expect(plain(sessionsPanelOf({ ...VIEW, peers: PEERS.slice(0, 1) }, 43, 8).summary ?? [])).toBe('1 open')
 })
+
+// ── Flat bars, one ink ──────────────────────────────────────────────────────
+
+const barRunsOf = (row: readonly StatusBandRun[]) => row.filter(run => /^[█─╂┃]+$/.test(run.text))
+
+test('draws each bar flat: one ink for what is used, a subtle line for the rest, no ramp', () => {
+  const sevenDay = barRunsOf(limitsPanelOf(VIEW, 43).rows[1] ?? [])
+
+  const row = limitsPanelOf(VIEW, 43).rows[1] ?? []
+
+  expect(row.every(run => run.color?.startsWith('rgb(') !== true)).toBe(true)
+  expect(sevenDay.filter(run => run.text.includes('█')).map(run => run.color)).toEqual(['text'])
+  expect(row.find(run => run.text.trim() === '8%')).toMatchObject({ color: 'text', isBold: true })
+  expect(sevenDay.filter(run => /^─+$/.test(run.text)).every(run => run.color === 'subtle')).toBe(true)
+})
+
+test('turns a bar to warning while it runs ahead of its window', () => {
+  // 66% used with half the five-hour window gone.
+  const fiveHour = barRunsOf(limitsPanelOf(VIEW, 43).rows[0] ?? [])
+
+  expect(fiveHour.filter(run => run.text.includes('█')).map(run => run.color)).toEqual(['warning'])
+  expect((limitsPanelOf(VIEW, 43).rows[0] ?? []).find(run => run.text.trim() === '66%')?.color).toBe('warning')
+})
+
+test('leaves the names of the other sessions in the plain text ink', () => {
+  const [row] = sessionsPanelOf({ ...VIEW, peers: PEERS }, 43, 8).rows
+
+  expect(row?.[1]).toMatchObject({ text: 'reset-cust-location', isBold: true })
+  expect(row?.[1]?.color).toBeUndefined()
+})

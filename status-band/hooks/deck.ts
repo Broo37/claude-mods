@@ -1,12 +1,12 @@
 import type { StatusBandPanel, StatusBandRun, View } from '../types'
 
-import { PALETTE, barCells, barSpans, cost, duration, modelName, resetClock, resetDate, rgb, shortPath } from './format'
-import type { BarKind, Rgb } from './format'
-import { bold, readingsOf, stateOf, text } from './layout'
+import { PALETTE, barCells, barSpans, clampPercent, cost, duration, modelName, resetClock, resetDate, rgb, shortPath } from './format'
+import { readingsOf, stateOf, text } from './layout'
 import type { Segment } from './layout'
 
 // The limits as a panel of the Deck: one flat bar a row, all starting and
-// ending in the same columns, and a dim row saying where the session is.
+// ending in the same columns, and a dim row saying where the session is. The
+// bars are drawn in theme inks, as the Deck's route is, not in the band's ramps.
 
 // The least a bar keeps, however narrow the pane.
 const MIN_BAR = 5
@@ -20,7 +20,7 @@ const PERCENT = 4
 // A space after the name and after the bar, two before what is said at the right.
 const GAPS = 1 + 1 + 2
 
-type BarRow = { name: string; color: Rgb; kind: BarKind; percent: number; pace: number | undefined; right: string }
+type BarRow = { name: string; percent: number; pace: number | undefined; right: string }
 
 const LOADING = '(loading..)'
 
@@ -59,16 +59,12 @@ const barRowsOf = (view: View): BarRow[] => {
       ? [
           {
             name: '5H',
-            color: PALETTE.lavender,
-            kind: 'fiveHour' as const,
             percent: read.fiveHour,
             pace: read.pace.fiveHour,
             right: read.fiveHourResetsAt === null ? '' : `↻ ${resetClock(read.fiveHourResetsAt)}`,
           },
           {
             name: '7D',
-            color: PALETTE.yellow,
-            kind: 'sevenDay' as const,
             percent: read.sevenDay,
             pace: read.pace.sevenDay,
             right: read.sevenDayResetsAt === null ? '' : `↻ ${resetDate(read.sevenDayResetsAt)}`,
@@ -80,8 +76,6 @@ const barRowsOf = (view: View): BarRow[] => {
       : [
           {
             name: 'CX',
-            color: PALETTE.codexGreen,
-            kind: 'codex' as const,
             percent: read.codex,
             pace: read.pace.codex,
             right: `↻ ${resetDate(read.liveCodex.resetsAt)}`,
@@ -89,8 +83,6 @@ const barRowsOf = (view: View): BarRow[] => {
         ]),
     {
       name: 'ctx',
-      color: PALETTE.pink,
-      kind: 'context',
       percent: read.context,
       pace: undefined,
       right: `${tokens(view.contextTokens)} / ${tokens(view.contextWindow)}`,
@@ -98,17 +90,40 @@ const barRowsOf = (view: View): BarRow[] => {
   ]
 }
 
-const barLine = (row: BarRow, width: number): Segment[] => [
-  text(row.name.padEnd(NAME), row.color),
-  text(' '),
-  row.pace === undefined
-    ? { bar: row.kind, percent: row.percent, width }
-    : { bar: row.kind, percent: row.percent, width, pace: row.pace },
-  text(' '),
-  bold(`${row.percent}%`.padStart(PERCENT), row.color),
-  text('  '),
-  text(row.right, row.color),
-]
+// What a bar is drawn in: what is used in plain text, in warning while it runs
+// ahead of its window; what remains a subtle line, its pace a heavier stroke.
+const INK = { used: 'text', ahead: 'warning', rest: 'subtle', pace: 'inactive' } as const
+
+// One flat bar: a solid run for what is used and a thin line for the rest, the
+// cell the pace falls on struck through. Neighbours of one ink make one run.
+const flatBar = (row: BarRow, width: number): StatusBandRun[] => {
+  const filled = Math.round((clampPercent(row.percent) * width) / 100)
+  const marked = row.pace === undefined ? -1 : Math.min(width - 1, Math.floor((clampPercent(row.pace) * width) / 100))
+  const used = row.pace !== undefined && row.percent > row.pace ? INK.ahead : INK.used
+
+  return Array.from({ length: width }, (_, at): StatusBandRun =>
+    at < filled
+      ? { text: at === marked ? '┃' : '█', color: used }
+      : { text: at === marked ? '╂' : '─', color: at === marked ? INK.pace : INK.rest },
+  ).reduce<StatusBandRun[]>((runs, run) => {
+    const last = runs.at(-1)
+
+    return last !== undefined && last.color === run.color ? [...runs.slice(0, -1), { ...last, text: last.text + run.text }] : [...runs, run]
+  }, [])
+}
+
+const barLine = (row: BarRow, width: number): StatusBandRun[] => {
+  const used = row.pace !== undefined && row.percent > row.pace ? INK.ahead : INK.used
+
+  return [
+    { text: `${row.name.padEnd(NAME)} `, color: 'inactive' },
+    ...flatBar(row, width),
+    { text: ' ' },
+    { text: `${row.percent}%`.padStart(PERCENT), color: used, isBold: true },
+    { text: '  ' },
+    { text: row.right, color: 'inactive' },
+  ]
+}
 
 // Where the session is: the plan it runs on, its folder, its branch and what
 // changed there, and the env when one is set; cut to the panel.
@@ -170,7 +185,7 @@ export const limitsPanelOf = (view: View, columns: number): StatusBandPanel => {
     title: 'limits',
     right: `${cost(view.costUsd)} · ${duration(view.now - view.startedAt)}`,
     label: labelOf(view),
-    rows: [...waiting, ...bars.map(row => runsOf(barLine(row, width))), placeOf(view, columns)],
+    rows: [...waiting, ...bars.map(row => barLine(row, width)), placeOf(view, columns)],
     summary: summaryOf(view),
   }
 }
@@ -206,7 +221,7 @@ export const sessionsPanelOf = (view: View, columns: number, rows: number): Stat
 
     return [
       { text: `${MARKS[state.rank] ?? '·'} `, color: ink },
-      { text: name, color: rgb(PALETTE.subtext), isBold: true },
+      { text: name, isBold: true },
       { text: ' '.repeat(Math.max(1, columns - 2 - name.length - doing.length)) },
       { text: doing, color: ink },
     ]
