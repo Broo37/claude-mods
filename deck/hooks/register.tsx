@@ -15,6 +15,10 @@ import type { DeckPanel, DeckPanelId, DeckRun } from './frame'
 
 const PANE = { id: 'deck', title: 'Deck', columns: 32 }
 
+// How far the Deck stands off the pane's edges, at the left and at the right:
+// as far as the lines of the other tabs stand off the left.
+const GUTTER = 2
+
 // The narrowest a panel's rows are asked for, however narrow the pane.
 const NARROWEST = 10
 
@@ -305,7 +309,7 @@ export const register: Register = (on, options) => {
       )
     }
 
-    const width = Math.max(NARROWEST, e.props.bodyColumns)
+    const width = Math.max(NARROWEST, e.props.bodyColumns - 2 * GUTTER)
     const lent = await panelsOf($, panels, width)
     const order = orderOf(panels, await read($, top))
     // The pet, where the surface draws rasters and the sessions are shown.
@@ -387,7 +391,7 @@ export const register: Register = (on, options) => {
     }
 
     return (
-      <Box flexDirection="column">
+      <Box flexDirection="column" paddingX={GUTTER}>
         <Box>
           <Text bold>DECK</Text>
           <Text> </Text>

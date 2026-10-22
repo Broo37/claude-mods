@@ -374,7 +374,7 @@ test('draws the header, the route under the line name, then a track for each sec
   expect(lines.slice(2, 8).map(line => line.trimEnd())).toEqual([
     '✓  📖 Read your brand notes',
     '┃',
-    '◉  🔨 Build the pricing section      ████░░ 60%',
+    '◉  🔨 Build the pricing section  ████░░ 60%',
     '┃',
     '┃',
     '○  🔨 Add the contact form',
@@ -601,7 +601,7 @@ test('runs the trains on every track and on the spur while a panel is live', OWN
   expect(clientsOf(tree, './track.tsx').map(node => (node.props?.props as TrackProps).active)).toEqual([true, true, true, true])
   expect(clientsOf(tree, './track.tsx').map(node => (node.props?.props as TrackProps).line)).toEqual(['suggestion', 'suggestion', 'suggestion', 'suggestion'])
   expect(clientsOf(tree, './spur.tsx').map(node => node.props?.props)).toEqual([
-    { rows: 2, active: true, line: 'suggestion', train: 'warning', start: 49, lap: 4, cycle: 200 },
+    { rows: 2, active: true, line: 'suggestion', train: 'warning', start: 45, lap: 4, cycle: 184 },
   ])
 })
 
@@ -624,7 +624,7 @@ test('moves the train down the spur on its own clock, without drawing the Deck a
     props: { title: 'Deck', isFocused: false, bodyColumns: 47, placement: 'dock', scroll: { offset: 0, bodyRows: 30 }, view: {} },
   } as Parameters<Engine['ui']['mount']>[0])) as unknown as ClientUi
   // The train reaches the spur once it has run the route's track.
-  await ui.advance(TRACK_STEP_MS * 49)
+  await ui.advance(TRACK_STEP_MS * 45)
   const drawnAt = world.redraws
   const before = textOf(await ui.drawn({ in: 'spur' }))
   await ui.advance(TRACK_STEP_MS)
@@ -647,7 +647,7 @@ test('keeps the line whole down the spur, the train running beside it', OWNERS, 
     props: { title: 'Deck', isFocused: false, bodyColumns: 47, placement: 'dock', scroll: { offset: 0, bodyRows: 30 }, view: {} },
   } as Parameters<Engine['ui']['mount']>[0])) as unknown as ClientUi
   const frames: string[][] = []
-  await ui.advance(TRACK_STEP_MS * 49)
+  await ui.advance(TRACK_STEP_MS * 45)
 
   for (let step = 0; step < 4; step += 1) {
     frames.push(linesOf(await ui.drawn({ in: 'spur' })))
@@ -665,9 +665,9 @@ test('gives every track its leg of one trip: the route, its spur, then the other
   await start($, clock)
   const tracks = clientsOf(await mountDeck($), './track.tsx').map(node => node.props?.props as TrackProps)
 
-  // 47 columns: a track is a lap of 49 steps, the spur of 4.
-  expect(tracks.map(track => track.start)).toEqual([0, 53, 102, 151])
-  expect(tracks.every(track => track.lap === 49 && track.cycle === 200)).toBe(true)
+  // 47 columns, 43 between the gutters: a track is a lap of 45 steps, the spur of 4.
+  expect(tracks.map(track => track.start)).toEqual([0, 49, 94, 139])
+  expect(tracks.every(track => track.lap === 45 && track.cycle === 184)).toBe(true)
 })
 
 test('runs one train at a time, down the spur and from track to track, the labels kept', OWNERS, async ($, on) => {
@@ -683,14 +683,14 @@ test('runs one train at a time, down the spur and from track to track, the label
   const keys = ['track-plan', 'spur', 'track-limits', 'track-timeline', 'track-sessions']
 
   for (const key of keys.filter(key => key !== 'spur')) {
-    await ui.resize({ columns: 47, rows: 1, in: key })
+    await ui.resize({ columns: 43, rows: 1, in: key })
   }
 
   const visited = new Set<string>()
   let isOne = true
 
   // One whole trip, looked at every step.
-  for (let step = 0; step < 200; step += 1) {
+  for (let step = 0; step < 184; step += 1) {
     const frames = await Promise.all(keys.map(async key => textOf(await ui.drawn({ in: key }))))
     const lit = keys.filter((_, at) => frames[at]?.includes('●') === true)
     isOne = isOne && lit.length <= 1
@@ -712,6 +712,17 @@ test('draws the tracks as still rules with motion off', { ...OWNERS, options: { 
 
   expect(clientsOf(tree, './track.tsx')).toEqual([])
   expect(tracksOf(tree)).toEqual(['Build my landing page', 'limits', 'this turn', 'sessions'])
+})
+
+test('stands two columns off the pane at both sides, its tracks as wide as the room between', { ...OWNERS, options: { motion: false } }, async ($, on) => {
+  const { clock } = boot(on)
+  await start($, clock)
+  const tree = await mountDeck($)
+  const tracks = linesOf(tree).filter(line => line.startsWith('━━ '))
+
+  expect(tree.props?.paddingX).toBe(2)
+  expect(tracks).toHaveLength(4)
+  expect(tracks.every(line => line.length === 47 - 2 * 2)).toBe(true)
 })
 
 test('draws the pet under the sessions on the terminal', OWNERS, async ($, on) => {
