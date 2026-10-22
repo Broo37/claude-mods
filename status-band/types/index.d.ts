@@ -43,8 +43,29 @@ export type View = {
   turn: Turn | null
 }
 
+// One run of a lent panel's row: its text and how it is drawn, colors as `rgb(r,g,b)`.
+export type StatusBandRun = { text: string; color?: string; backgroundColor?: string; isBold?: boolean; isDim?: boolean }
+
+// The limits as a panel another mod draws in a box of its own (the Deck): a
+// title and what stands at its right, a label for that mod's header, and rows.
+export type StatusBandPanel = { id: 'limits'; title: string; right: string; label: StatusBandRun[]; rows: StatusBandRun[][] }
+
+// The mod that hosts the status, and whether its pane is in the dock now.
+export type StatusBandHost = { by: string; isDocked: boolean }
+
+// What status-band lends another mod: its panel, and a way to host it, so the
+// Status tab stands aside, and the band too while the host is docked.
+export type StatusBand = {
+  panel(args: { id: 'limits'; columns: number }): Promise<StatusBandPanel>
+  host(args: StatusBandHost): Promise<boolean>
+}
+
 declare module 'claude-code' {
+  interface EngineInterface {
+    statusBand: StatusBand
+  }
+
   interface PluginState {
-    'status-band': { view: Shaped<View> }
+    'status-band': { view: Shaped<View>; host: StatusBandHost | null }
   }
 }

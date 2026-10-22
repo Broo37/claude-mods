@@ -1,9 +1,10 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, FsEntry, Register, SessionUsage, Timer } from 'claude-code'
 
-import type { Codex, Git, Limit, Peer, View } from '../types'
+import type { Codex, Git, Limit, Peer, StatusBandHost, StatusBandPanel, View } from '../types'
 
 import { boxHeight, columnRows } from './column'
+import { limitsPanelOf } from './deck'
 import { PALETTE, barCells, barSpans, glintCells, rgb, spinnerCell } from './format'
 import type { BarKind, BarSpan } from './format'
 import { boardOf, boardRows, hasBeat, hintRest, hintShift, isAtWork, linesOf, positionOf, sizeOf } from './layout'
@@ -132,9 +133,31 @@ let isInline = false
 // The width of terminal from which the side pane docks a pane asked for, in fullscreen.
 const DOCK_COLUMNS = 110
 
+// The panel a lent method answers where no hook of this mod does: no rows, so a host hides it.
+const UNLENT: StatusBandPanel = { id: 'limits', title: 'limits', right: '', label: [], rows: [] }
+
+// The mod that hosts the status (the Deck), if one does: then the Status tab
+// stands aside, and the band too while the host's pane is in the dock. Kept in
+// the session's state, which outlasts a reload, and here, which outlasts a
+// /clear that empties the state.
+const hostAtom = atom({ plugin: 'status-band', key: 'host' } as const, null as StatusBandHost | null)
+
+let hosted: StatusBandHost | null = null
+
+async function hostOf($: EngineInterface) {
+  hosted ??= await read($, hostAtom)
+
+  return hosted
+}
+
 // Whether the Status tab is on screen in the dock, so the band leaves its place
 // to Claude Code: on, drawn in the dock, not closed by the person, and placed.
+// A docked host shows the status in its own pane, which counts the same.
 async function isTabPlaced($: EngineInterface, shown: View) {
+  if ((await hostOf($))?.isDocked === true) {
+    return true
+  }
+
   return (
     isTabOn &&
     isTabDrawn &&
@@ -522,7 +545,7 @@ async function watchStatus($: EngineInterface) {
     return
   }
 
-  if (isInline) {
+  if (isInline || (await hostOf($)) !== null) {
     return
   }
 
@@ -910,6 +933,34 @@ export const register: Register = (on, options) => {
   isTabOn = options.tab !== false
   let tools = 0
 
+  // What status-band lends another mod, the Deck: its limits as a panel, and a
+  // way to host them. The methods here stand at the bottom of their events;
+  // the hooks below answer them, holding `$` as a method cannot.
+  on('engine.create', async ($, e, next) => {
+    const built = await next(e)
+
+    return { ...built, statusBand: { panel: async () => UNLENT, host: async () => false } }
+  })
+
+  on('statusBand.panel', async ($, e) => ({ value: limitsPanelOf(await read($, view), e.columns) }))
+
+  // Hosted, the Status tab closes and stays closed, and the band redraws to
+  // give way to the host's pane or to stand in for it.
+  on('statusBand.host', async ($, e) => {
+    hosted = { by: e.by, isDocked: e.isDocked }
+    await update($, hostAtom, () => hosted)
+
+    if ((await $.ui.panes()).some(pane => pane.id === STATUS.id)) {
+      hasOpenedStatus = false
+      isTabDrawn = false
+      await $.ui.close({ id: STATUS.id })
+    }
+
+    $.ui.invalidate('ui.render')
+
+    return { value: true }
+  })
+
   on('session.start', async ($, e, next) => {
     await $.command.register({
       name: 'sessions',
@@ -955,6 +1006,12 @@ export const register: Register = (on, options) => {
   // The Status tab, asked for: brought to the front as the Sessions pane is,
   // and no longer taken for one the person closed.
   on('command.run', { command: 'band' }, async ($, e) => {
+    const host = await hostOf($)
+
+    if (host !== null) {
+      return { text: host.by === 'deck' ? 'Status is in the Deck: /deck limits' : `Status is in ${host.by}` }
+    }
+
     if (!isTabOn) {
       return { text: 'Status tab is off: switch "Status tab" on in /config.' }
     }

@@ -1,7 +1,8 @@
 import { expect, mock, test } from 'claude-code/testing'
-import type { Engine, MockClock } from 'claude-code/testing'
+import type { Engine, MockClock, Plugin } from 'claude-code/testing'
 import type { FsEntry, On, SessionUsage } from 'claude-code'
 
+import type { StatusBandPanel } from '../types'
 import { CREATURES, DIG_MS, HOPS_MS, petFrame } from '../hooks/pet'
 
 const MINUTE = 60_000
@@ -1973,4 +1974,128 @@ test('sweeps a glint up the bars of the tab once a reading has changed, then res
   await clock.advance(FRAME * 20)
 
   expect(await bottomOf5H($)).toEqual(plain)
+})
+
+// ── Lent to the Deck ────────────────────────────────────────────────────────
+
+const plainRows = (rows: readonly (readonly { text: string }[])[]) => rows.map(row => row.map(run => run.text).join(''))
+
+// A stand-in for the Deck: it asks for the limits panel on a command, and hosts
+// status-band on another, answering with what it got back.
+const DECK: Plugin = {
+  name: 'deck',
+  register(on) {
+    on('command.run', { command: 'limits' }, async ($, e) => ({
+      text: JSON.stringify(await $.statusBand.panel({ id: 'limits', columns: Number(e.args) })),
+    }))
+    on('command.run', { command: 'host' }, async ($, e) => ({
+      text: String(await $.statusBand.host({ by: 'deck', isDocked: e.args === 'docked' })),
+    }))
+  },
+}
+
+const ask = async ($: Engine, command: string, args: string) =>
+  (await $.command.run({ command, args, origin: { kind: 'composer' }, presentation: { isFullscreen: true, columns: 150 } })) as { text: string }
+
+const lent = async ($: Engine, columns: number) => JSON.parse((await ask($, 'limits', String(columns))).text) as StatusBandPanel
+
+test('lends its limits panel to another mod through $.statusBand.panel', { plugins: [DECK] }, async ($, on) => {
+  const { clock } = boot(on)
+  await start($, clock)
+  const panel = await lent($, 43)
+
+  expect(panel.title).toBe('limits')
+  expect(panel.right).toBe('$ 1.23 · 1h2m')
+  expect(plainRows(panel.rows).at(-1)).toBe('~\\project · main')
+})
+
+test('lends a loading panel before its first reading', { plugins: [DECK] }, async ($, on) => {
+  boot(on)
+
+  expect(plainRows((await lent($, 43)).rows)).toEqual(['(loading..)'])
+})
+
+const engineBand = async ($: Engine) => {
+  const band = await $.ui.mount({ ...BAND, surface: 'terminal' })
+  const found = await band.find({ type: 'Text', text: 'engine' })
+  await band.unmount()
+
+  return found !== undefined
+}
+
+test('answers a host with true', { plugins: [DECK] }, async ($, on) => {
+  const { clock } = boot(on)
+  await start($, clock)
+
+  expect((await ask($, 'host', 'docked')).text).toBe('true')
+})
+
+test('a host keeps the Status tab from opening at the start of a session', { plugins: [DECK] }, async ($, on) => {
+  const { world, clock } = boot(on)
+  world.canDock = true
+  await ask($, 'host', 'docked')
+  await start($, clock)
+  await clock.advance(POLL * 3)
+
+  expect(openedIds(world)).not.toContain('status')
+})
+
+test('a host closes a Status tab that is open, and it stays closed', { plugins: [DECK] }, async ($, on) => {
+  const { world, clock } = boot(on)
+  world.canDock = true
+  await start($, clock)
+
+  expect(world.panes).toContain('status')
+
+  await ask($, 'host', 'docked')
+  await clock.advance(POLL * 3)
+
+  expect(world.closed).toContain('status')
+  expect(world.panes).not.toContain('status')
+  expect(openedIds(world)).toEqual(['status'])
+})
+
+test('while the host is docked the band gives its place back', { plugins: [DECK] }, async ($, on) => {
+  const { clock } = boot(on)
+  await start($, clock)
+
+  expect(await rowsOf($)).toHaveLength(7)
+
+  await ask($, 'host', 'docked')
+
+  expect(await engineBand($)).toBe(true)
+})
+
+test('while the host is not docked the band stands, and the Status tab stays closed', { plugins: [DECK] }, async ($, on) => {
+  const { world, clock } = boot(on)
+  world.canDock = true
+  await start($, clock)
+  await ask($, 'host', 'docked')
+  await ask($, 'host', 'undocked')
+  await clock.advance(POLL * 3)
+
+  expect(await rowsOf($)).toHaveLength(7)
+  expect(world.panes).not.toContain('status')
+})
+
+test('a host outlasts /clear', { plugins: [DECK] }, async ($, on) => {
+  const { world, clock } = boot(on)
+  world.canDock = true
+  await start($, clock)
+  await ask($, 'host', 'docked')
+  await $.classic.SessionStart({ source: 'clear' })
+  await clock.advance(POLL * 3)
+
+  expect(world.panes).not.toContain('status')
+  expect(await engineBand($)).toBe(true)
+})
+
+test('/band says where the status is while a host has it', { plugins: [DECK] }, async ($, on) => {
+  const { world, clock } = boot(on)
+  world.canDock = true
+  await start($, clock)
+  await ask($, 'host', 'docked')
+
+  expect(await $.command.run(BAND_CMD)).toEqual({ text: 'Status is in the Deck: /deck limits' })
+  expect(world.panes).not.toContain('status')
 })
