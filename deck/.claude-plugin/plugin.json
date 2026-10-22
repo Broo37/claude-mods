@@ -1,0 +1,16 @@
+{
+  "name": "deck",
+  "version": "0.1.0",
+  "description": "One tab of the side pane for our mods: the plan and your limits as boxed panels",
+  "author": { "name": "Broo37" },
+  "types": "./types/index.d.ts",
+  "dependencies": ["clean-view", "status-band"],
+  "userConfig": {
+    "openOnStart": {
+      "type": "boolean",
+      "title": "Open at start",
+      "description": "Open the Deck in the side pane when a session starts; off, /deck opens it",
+      "default": true
+    }
+  }
+}
