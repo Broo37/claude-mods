@@ -271,7 +271,7 @@ const textOf = (node: unknown): string => {
   return typeof node === 'object' && node !== null ? ((node as Drawn).children ?? []).map(textOf).join('') : ''
 }
 
-// The Deck as the lines it draws: the header, then each box's lines.
+// The Deck as the lines it draws: the header, then each section's track and rows.
 const linesOf = (node: unknown): string[] => {
   const drawn = node as Drawn
 

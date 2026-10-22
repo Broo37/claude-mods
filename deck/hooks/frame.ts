@@ -27,10 +27,6 @@ export const PANELS = ['plan', 'limits', 'timeline', 'sessions'] as const
 
 export type DeckPanelId = (typeof PANELS)[number]
 
-// Each panel's border, a color of the person's theme (as Flightdeck takes them),
-// so the boxes read apart; a panel that rests has it dimmed.
-export const BORDERS: Record<DeckPanelId, string> = { plan: 'claude', limits: 'suggestion', timeline: 'success', sessions: 'merged' }
-
 // The mini summary's rows: the header and a line a panel.
 const MINI = 4
 

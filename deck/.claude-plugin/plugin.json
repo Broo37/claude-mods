@@ -1,7 +1,7 @@
 {
   "name": "deck",
   "version": "0.1.0",
-  "description": "One tab of the side pane for our mods: the plan, your limits, the turn and your sessions as boxed panels",
+  "description": "One tab of the side pane for our mods: the plan, your limits, the turn and your sessions, drawn as a train line",
   "author": {
     "name": "Broo37"
   },
