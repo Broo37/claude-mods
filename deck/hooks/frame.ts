@@ -16,6 +16,10 @@ export type DeckPanel = {
   rows: DeckRun[][]
   isLive?: boolean
   summary?: DeckRun[]
+  // A plan lent as a route: the job's name, its phase, its steps as stops.
+  name?: string
+  phase?: string
+  stops?: DeckStop[]
 }
 
 // The panels, in their own order.
@@ -94,4 +98,115 @@ export const miniOf = (panels: readonly DeckPanel[], columns: number): DeckRun[]
   )
 
   return [headerOf(panels, columns), ...lines].slice(0, MINI)
+}
+
+// ── The train line ───────────────────────────────────────────────────────────
+// The plan is a route: its steps are stations down one line, the one at work
+// has a spur under it where the train runs while Claude works, and every
+// section of the Deck sits under a track, a heavy rule with its name.
+
+// The Deck's inks, theme keys, so light and dark themes both read: the route
+// (its line and every track), the train, the station at work, the stations
+// ahead, and what holds a job.
+export const INK = {
+  route: 'suggestion',
+  train: 'warning',
+  here: 'text',
+  ahead: 'inactive',
+  held: 'warning',
+  fault: 'error',
+} as const
+
+// A step as a stop on the route.
+export type DeckStop = { name: string; icon: string; status: 'done' | 'active' | 'upcoming'; percent: number; hasReported: boolean }
+
+// A row of the route: a station, the line between two, or the spur the train runs on.
+export type RouteRow = { kind: 'station'; runs: DeckRun[] } | { kind: 'link' } | { kind: 'spur' }
+
+// The meter of the station at work: so many cells, and its percent.
+const METER = 6
+
+// The station at work, by what holds the job: at work, waiting on the person, failing, stopped.
+const HERE: Record<string, DeckRun> = {
+  'needs-you': { text: '‖', color: INK.held, isBold: true },
+  stuck: { text: '!', color: INK.fault, isBold: true },
+  stopped: { text: '■', color: INK.fault, isBold: true },
+}
+
+const glyphOf = (stop: DeckStop, phase: string): DeckRun => {
+  if (stop.status === 'done') {
+    return { text: '✓', color: INK.route }
+  }
+
+  if (stop.status === 'upcoming') {
+    return { text: '○', color: INK.ahead }
+  }
+
+  return HERE[phase] ?? { text: '◉', color: INK.here, isBold: true }
+}
+
+// Until the step reports how far it is, the station has no meter: a mark alone
+// would read as text cut short.
+const meterOf = (stop: DeckStop): DeckRun[] => {
+  if (!stop.hasReported) {
+    return []
+  }
+
+  const lit = Math.round((Math.min(100, Math.max(0, stop.percent)) * METER) / 100)
+
+  return [
+    { text: '█'.repeat(lit), color: INK.route },
+    { text: '░'.repeat(METER - lit), color: INK.ahead },
+    { text: ` ${stop.percent}%`, color: INK.here },
+  ]
+}
+
+const stationOf = (stop: DeckStop, phase: string, columns: number): DeckRun[] => {
+  const isHere = stop.status === 'active'
+  const right = isHere ? meterOf(stop) : []
+  const rightWidth = right.reduce((sum, run) => sum + run.text.length, 0)
+  const lead = 1 + 2 + stop.icon.length + 1
+  const room = Math.max(1, columns - lead - (rightWidth > 0 ? rightWidth + 2 : 0))
+  const name = stop.name.length > room ? `${stop.name.slice(0, Math.max(0, room - 1))}…` : stop.name
+  const gap = columns - lead - name.length - rightWidth
+
+  return [
+    glyphOf(stop, phase),
+    { text: `  ${stop.icon} ` },
+    { text: name, ...(isHere ? { isBold: true } : { color: stop.status === 'upcoming' ? INK.ahead : INK.here }) },
+    ...(rightWidth > 0 ? [{ text: ' '.repeat(Math.max(2, gap)) }, ...right] : []),
+  ]
+}
+
+export const routeOf = (stops: readonly DeckStop[], phase: string, columns: number): RouteRow[] =>
+  stops.flatMap((stop, at): RouteRow[] => [
+    { kind: 'station', runs: stationOf(stop, phase, columns) },
+    ...(at === stops.length - 1 ? [] : [stop.status === 'active' ? ({ kind: 'spur' } as const) : ({ kind: 'link' } as const)]),
+  ])
+
+// One leg of the train's trip: a track or the spur, by its key, and how many
+// steps the train takes to pass along it.
+export type Leg = { key: string; lap: number }
+
+// The train's trip down the Deck, one leg after another in reading order: when
+// each leg starts, and how long the whole trip takes before it starts again.
+export const tripOf = (legs: readonly Leg[]) =>
+  legs.reduce<{ cycle: number; starts: Record<string, number> }>(
+    (trip, leg) => ({ cycle: trip.cycle + leg.lap, starts: { ...trip.starts, [leg.key]: trip.cycle } }),
+    { cycle: 0, starts: {} },
+  )
+
+// A track: a heavy rule, its label at the left, its figure at the right, as wide as asked.
+export const trackOf = (label: string, right: string, width: number, ink: Omit<DeckRun, 'text'> = { color: INK.here, isBold: true }): DeckRun[] => {
+  const tail = right === '' ? '' : ` ${right} ━━`
+  const room = Math.max(1, width - 3 - 1 - tail.length - 2)
+  const named = label.length > room ? `${label.slice(0, Math.max(0, room - 1))}…` : label
+  const rule = Math.max(2, width - 3 - named.length - 1 - tail.length)
+
+  return [
+    { text: '━━ ', color: INK.route },
+    { text: named, ...ink },
+    { text: ` ${'━'.repeat(rule)}`, color: INK.route },
+    ...(tail === '' ? [] : [{ text: ` ${right} `, color: INK.ahead }, { text: '━━', color: INK.route }]),
+  ]
 }

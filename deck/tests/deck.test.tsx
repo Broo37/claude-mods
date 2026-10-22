@@ -18,10 +18,17 @@ const CLEAN_VIEW: Plugin = {
       id: 'plan' as const,
       title: 'plan',
       right: '',
-      label: [{ text: '▶ 2/4 · 1m 12s' }],
+      label: [{ text: '▶ stop 2 of 4 · 1m 12s' }],
       rows: [[{ text: '▶ 🔨 Build the pricing section' }]],
       isLive: true,
       summary: [{ text: '▶ 2/4 ' }, { text: 'Build the pricing section', isBold: true }],
+      name: 'Build my landing page',
+      phase: 'working' as const,
+      stops: [
+        { name: 'Read your brand notes', icon: '📖', status: 'done' as const, percent: 100, hasReported: false },
+        { name: 'Build the pricing section', icon: '🔨', status: 'active' as const, percent: 60, hasReported: true },
+        { name: 'Add the contact form', icon: '🔨', status: 'upcoming' as const, percent: 0, hasReported: false },
+      ],
     }
 
     on('engine.create', async ($, e, next) => ({
@@ -35,7 +42,14 @@ const CLEAN_VIEW: Plugin = {
         return { deny: 'reloading' }
       }
 
-      return { value: way === 'idle' ? { ...plan, label: [{ text: 'idle' }], rows: [], isLive: false } : plan }
+      return {
+        value:
+          way === 'idle'
+            ? { ...plan, label: [{ text: 'idle' }], rows: [], isLive: false, stops: [], phase: 'idle' as const }
+            : way === 'still'
+              ? { ...plan, isLive: false }
+              : plan,
+      }
     })
     on('command.run', { command: 'touch-plan' }, async $ => {
       await $.state.set({ plugin: 'clean-view', key: 'checklist' }, { phase: 'working' } as never)
@@ -285,6 +299,35 @@ const mountDeck = async ($: Engine, surface: 'terminal' | 'desktop' = 'terminal'
   return tree
 }
 
+const nodesOf = (node: unknown): Drawn[] => {
+  if (typeof node !== 'object' || node === null) {
+    return []
+  }
+
+  const drawn = node as Drawn
+
+  return [drawn, ...(drawn.children ?? []).flatMap(nodesOf)]
+}
+
+type TrackProps = { label: string; right: string; active: boolean; line: string; train: string; start: number; lap: number; cycle: number }
+
+const clientsOf = (tree: unknown, module: string) =>
+  nodesOf(tree).filter(node => node.type === 'Client' && String(node.props?.module ?? '').endsWith(module.slice(1)))
+
+// The tracks of the Deck by their labels: the track module's, or a drawn rule's.
+const tracksOf = (tree: unknown) => {
+  const modules = clientsOf(tree, './track.tsx').map(node => (node.props?.props as TrackProps).label)
+
+  return modules.length > 0 ? modules : linesOf(tree).flatMap(line => (line.startsWith('━━ ') ? [line.slice(3).split(' ━')[0] ?? ''] : []))
+}
+
+type ClientUi = {
+  drawn: (scope?: { in: string }) => Promise<unknown>
+  advance: (ms: number) => Promise<void>
+  resize: (size: { columns: number; rows: number; in: string }) => Promise<void>
+  unmount: () => Promise<void>
+}
+
 const docks = (world: World, isDocked: boolean) =>
   hostsOf(world).filter(host => host.isDocked === isDocked).map(host => host.plugin).sort()
 
@@ -321,34 +364,31 @@ test('tells both mods once that it is docked, when it is first drawn in the dock
   expect(docks(world, true)).toEqual(ALL)
 })
 
-test('draws its header, then the plan box, then the limits box', OWNERS, async ($, on) => {
+test('draws the header, the route under the line name, then a track for each section', { ...OWNERS, options: { motion: false } }, async ($, on) => {
   const { clock } = boot(on, { DECK_PET: 'off' })
   await start($, clock)
   const lines = linesOf(await mountDeck($))
 
-  expect(lines).toEqual([
-    'DECK · Opus 5.5 xhigh · ▶ 2/4 · 1m 12s',
-    'plan',
-    '▶ 🔨 Build the pricing section',
-    'limits$ 0.42 · 3m',
-    '5H  ████ 66%',
-    'master !1',
-    'this turn41s… · 2 tools',
-    '0s─────41s',
-    'Read  ██',
-    'sessions2 open',
-    '○ geisa-pk  waiting 29m',
-    '● claude-mods  working 4m',
+  expect(lines[0]).toBe('DECK ▶ stop 2 of 4 · 1m 12sOpus 5.5 xhigh')
+  expect(lines[1]?.startsWith('━━ Build my landing page ━')).toBe(true)
+  expect(lines.slice(2, 8).map(line => line.trimEnd())).toEqual([
+    '✓  📖 Read your brand notes',
+    '┃',
+    '◉  🔨 Build the pricing section      ████░░ 60%',
+    '┃',
+    '┃',
+    '○  🔨 Add the contact form',
   ])
+  expect(tracksOf(await mountDeck($))).toEqual(['Build my landing page', 'limits', 'this turn', 'sessions'])
+  expect(lines).toContain('5H  ████ 66%')
+  expect(lines).toContain('● claude-mods  working 4m')
 })
 
-test('draws each panel in a round box with a cell of room each side', OWNERS, async ($, on) => {
+test('draws no boxes: every section sits under a track', OWNERS, async ($, on) => {
   const { clock } = boot(on)
   await start($, clock)
-  const boxes = ((await mountDeck($)).children ?? []).slice(1) as Drawn[]
 
-  expect(boxes).toHaveLength(4)
-  expect(boxes.every(box => box.props?.borderStyle === 'round' && box.props?.paddingX === 1)).toBe(true)
+  expect(nodesOf(await mountDeck($)).some(node => node.props?.borderStyle !== undefined)).toBe(false)
 })
 
 test('leaves out a panel with no rows, and keeps its label in the header', OWNERS, async ($, on) => {
@@ -356,8 +396,8 @@ test('leaves out a panel with no rows, and keeps its label in the header', OWNER
   await start($, clock)
   const lines = linesOf(await mountDeck($))
 
-  expect(lines[0]).toBe('DECK · Opus 5.5 xhigh · idle')
-  expect(lines).not.toContain('plan')
+  expect(lines[0]).toBe('DECK idleOpus 5.5 xhigh')
+  expect(tracksOf(await mountDeck($))).not.toContain('Build my landing page')
 })
 
 test('puts the limits on top with /deck limits', OWNERS, async ($, on) => {
@@ -365,7 +405,7 @@ test('puts the limits on top with /deck limits', OWNERS, async ($, on) => {
   await start($, clock)
 
   expect(await deck($, clock, 'limits')).toEqual({ text: 'Deck: limits on top.' })
-  expect(linesOf(await mountDeck($)).slice(1, 2)).toEqual(['limits$ 0.42 · 3m'])
+  expect(tracksOf(await mountDeck($))[0]).toBe('limits')
 })
 
 test('closes with /deck while in front, and opens again with the next /deck', OWNERS, async ($, on) => {
@@ -413,7 +453,7 @@ test('draws the other panel and says which one is not available when its mod thr
   await start($, clock)
   const lines = linesOf(await mountDeck($))
 
-  expect(lines).toContain('▶ 🔨 Build the pricing section')
+  expect(lines.some(line => line.includes('Build the pricing section'))).toBe(true)
   expect(lines).toContain('limits: not available')
 })
 
@@ -423,7 +463,7 @@ test('inline above the prompt it draws the mini summary and stays open', OWNERS,
   await clock.advance(OPEN_AFTER_MS)
 
   expect(linesOf(await mountDeck($, 'terminal', 'inline'))).toEqual([
-    'DECK · Opus 5.5 xhigh · ▶ 2/4 · 1m 12s',
+    'DECK · Opus 5.5 xhigh · ▶ stop 2 of 4 · 1m 12s',
     '▶ 2/4 Build the pricing section',
     '5H 66% · 7D 8% · ctx 6%',
     'turn 41s… · 2 tools',
@@ -471,25 +511,24 @@ test('draws the same on a surface that is not a terminal', OWNERS, async ($, on)
   await start($, clock)
 
   for (const surface of ['terminal', 'desktop'] as const) {
-    expect(linesOf(await mountDeck($, surface))[0]).toBe('DECK · Opus 5.5 xhigh · ▶ 2/4 · 1m 12s')
+    expect(linesOf(await mountDeck($, surface))[0]).toBe('DECK ▶ stop 2 of 4 · 1m 12sOpus 5.5 xhigh')
   }
 })
 
-const panelTitles = (lines: string[]) =>
-  lines.filter(line => /^(plan|limits|this turn|last turn|sessions)/.test(line)).map(line => line.split(/[0-9$]/)[0])
+const panelTitles = (tree: unknown) => tracksOf(tree)
 
 test('shows the panels the panels setting names, in its order', { ...OWNERS, options: { panels: 'sessions, limits, nope' } }, async ($, on) => {
   const { clock } = boot(on)
   await start($, clock)
 
-  expect(panelTitles(linesOf(await mountDeck($)))).toEqual(['sessions', 'limits'])
+  expect(panelTitles(await mountDeck($))).toEqual(['sessions', 'limits'])
 })
 
 test('leaves out the timeline before any tool call, and the sessions when none is open', OWNERS, async ($, on) => {
   const { clock } = boot(on, { DECK_TIMELINE: 'none', DECK_SESSIONS: 'none', DECK_PET: 'off' })
   await start($, clock)
 
-  expect(panelTitles(linesOf(await mountDeck($)))).toEqual(['plan', 'limits'])
+  expect(panelTitles(await mountDeck($))).toEqual(['Build my landing page', 'limits'])
 })
 
 const SHORTCUTS = [
@@ -504,7 +543,7 @@ for (const [command, panel, title] of SHORTCUTS) {
     await start($, clock)
 
     expect(await deck($, clock, '', true, command)).toEqual({ text: `Deck: ${panel} on top.` })
-    expect(panelTitles(linesOf(await mountDeck($)))[0]).toBe(title)
+    expect(panelTitles(await mountDeck($))[0]).toBe(title)
   })
 }
 
@@ -538,8 +577,6 @@ test('keeps still while no panel is live', OWNERS, async ($, on) => {
 
 // ── Borders and Clawd ───────────────────────────────────────────────────────
 
-const boxesOf = async ($: Engine, surface: 'terminal' | 'desktop' = 'terminal') =>
-  ((await mountDeck($, surface)).children ?? []).slice(1) as Drawn[]
 
 const find = (node: unknown, type: string): Drawn | undefined => {
   if (typeof node !== 'object' || node === null) {
@@ -553,24 +590,134 @@ const find = (node: unknown, type: string): Drawn | undefined => {
 
 const petBlits = (world: World) => world.blits.filter(blit => blit.key === 'pet')
 
-test('draws each box in its own theme color', OWNERS, async ($, on) => {
+// How often the train moves a cell, on a track or down the spur.
+const TRACK_STEP_MS = 70
+
+test('runs the trains on every track and on the spur while a panel is live', OWNERS, async ($, on) => {
   const { clock } = boot(on)
   await start($, clock)
+  const tree = await mountDeck($)
 
-  expect((await boxesOf($)).map(box => box.props?.borderColor)).toEqual(['claude', 'suggestion', 'success', 'merged'])
+  expect(clientsOf(tree, './track.tsx').map(node => (node.props?.props as TrackProps).active)).toEqual([true, true, true, true])
+  expect(clientsOf(tree, './track.tsx').map(node => (node.props?.props as TrackProps).line)).toEqual(['suggestion', 'suggestion', 'suggestion', 'suggestion'])
+  expect(clientsOf(tree, './spur.tsx').map(node => node.props?.props)).toEqual([
+    { rows: 2, active: true, line: 'suggestion', train: 'warning', start: 49, lap: 4, cycle: 200 },
+  ])
 })
 
-test("dims the border of a panel that rests, and only that one's", OWNERS, async ($, on) => {
-  const { clock } = boot(on, { DECK_TIMELINE: 'still' })
+test('keeps the trains still while nothing moves', OWNERS, async ($, on) => {
+  const { clock } = boot(on, { DECK_PLAN: 'still', DECK_TIMELINE: 'still' })
   await start($, clock)
+  const tree = await mountDeck($)
 
-  expect((await boxesOf($)).map(box => box.props?.borderDimColor === true)).toEqual([false, false, true, false])
+  expect([...clientsOf(tree, './track.tsx'), ...clientsOf(tree, './spur.tsx')].every(node => (node.props?.props as TrackProps).active === false)).toBe(true)
+})
+
+test('moves the train down the spur on its own clock, without drawing the Deck again', OWNERS, async ($, on) => {
+  const { world, clock } = boot(on)
+  await start($, clock)
+  const ui = (await $.ui.mount({
+    plugin: 'deck',
+    component: 'Pane',
+    requestId: 'deck',
+    surface: 'terminal',
+    props: { title: 'Deck', isFocused: false, bodyColumns: 47, placement: 'dock', scroll: { offset: 0, bodyRows: 30 }, view: {} },
+  } as Parameters<Engine['ui']['mount']>[0])) as unknown as ClientUi
+  // The train reaches the spur once it has run the route's track.
+  await ui.advance(TRACK_STEP_MS * 49)
+  const drawnAt = world.redraws
+  const before = textOf(await ui.drawn({ in: 'spur' }))
+  await ui.advance(TRACK_STEP_MS)
+  const after = textOf(await ui.drawn({ in: 'spur' }))
+  await ui.unmount()
+
+  expect(before).not.toBe(after)
+  expect(`${before}${after}`).toContain('●')
+  expect(world.redraws).toBe(drawnAt)
+})
+
+test('keeps the line whole down the spur, the train running beside it', OWNERS, async ($, on) => {
+  const { clock } = boot(on)
+  await start($, clock)
+  const ui = (await $.ui.mount({
+    plugin: 'deck',
+    component: 'Pane',
+    requestId: 'deck',
+    surface: 'terminal',
+    props: { title: 'Deck', isFocused: false, bodyColumns: 47, placement: 'dock', scroll: { offset: 0, bodyRows: 30 }, view: {} },
+  } as Parameters<Engine['ui']['mount']>[0])) as unknown as ClientUi
+  const frames: string[][] = []
+  await ui.advance(TRACK_STEP_MS * 49)
+
+  for (let step = 0; step < 4; step += 1) {
+    frames.push(linesOf(await ui.drawn({ in: 'spur' })))
+    await ui.advance(TRACK_STEP_MS)
+  }
+
+  await ui.unmount()
+
+  expect(frames.every(rows => rows.length === 2 && rows.every(row => row.startsWith('┃')))).toBe(true)
+  expect(frames.some(rows => rows.some(row => row === '┃●'))).toBe(true)
+})
+
+test('gives every track its leg of one trip: the route, its spur, then the other tracks in turn', OWNERS, async ($, on) => {
+  const { clock } = boot(on)
+  await start($, clock)
+  const tracks = clientsOf(await mountDeck($), './track.tsx').map(node => node.props?.props as TrackProps)
+
+  // 47 columns: a track is a lap of 49 steps, the spur of 4.
+  expect(tracks.map(track => track.start)).toEqual([0, 53, 102, 151])
+  expect(tracks.every(track => track.lap === 49 && track.cycle === 200)).toBe(true)
+})
+
+test('runs one train at a time, down the spur and from track to track, the labels kept', OWNERS, async ($, on) => {
+  const { clock } = boot(on)
+  await start($, clock)
+  const ui = (await $.ui.mount({
+    plugin: 'deck',
+    component: 'Pane',
+    requestId: 'deck',
+    surface: 'terminal',
+    props: { title: 'Deck', isFocused: false, bodyColumns: 47, placement: 'dock', scroll: { offset: 0, bodyRows: 30 }, view: {} },
+  } as Parameters<Engine['ui']['mount']>[0])) as unknown as ClientUi
+  const keys = ['track-plan', 'spur', 'track-limits', 'track-timeline', 'track-sessions']
+
+  for (const key of keys.filter(key => key !== 'spur')) {
+    await ui.resize({ columns: 47, rows: 1, in: key })
+  }
+
+  const visited = new Set<string>()
+  let isOne = true
+
+  // One whole trip, looked at every step.
+  for (let step = 0; step < 200; step += 1) {
+    const frames = await Promise.all(keys.map(async key => textOf(await ui.drawn({ in: key }))))
+    const lit = keys.filter((_, at) => frames[at]?.includes('●') === true)
+    isOne = isOne && lit.length <= 1
+    lit.forEach(key => visited.add(key))
+    expect(frames[2]).toContain(' limits ')
+    await ui.advance(TRACK_STEP_MS)
+  }
+
+  await ui.unmount()
+
+  expect(isOne).toBe(true)
+  expect([...visited].sort()).toEqual([...keys].sort())
+})
+
+test('draws the tracks as still rules with motion off', { ...OWNERS, options: { motion: false } }, async ($, on) => {
+  const { clock } = boot(on)
+  await start($, clock)
+  const tree = await mountDeck($)
+
+  expect(clientsOf(tree, './track.tsx')).toEqual([])
+  expect(tracksOf(tree)).toEqual(['Build my landing page', 'limits', 'this turn', 'sessions'])
 })
 
 test('draws the pet under the sessions on the terminal', OWNERS, async ($, on) => {
   const { clock } = boot(on)
   await start($, clock)
-  const pet = find((await boxesOf($))[3], 'Raster')
+  const pet = find(await mountDeck($), 'Raster')
 
   expect(pet?.props).toMatchObject({ key: 'pet', columns: 24, rows: 8 })
 })
@@ -585,16 +732,17 @@ test('draws no pet on a surface that has no raster', OWNERS, async ($, on) => {
 test('keeps the sessions panel for the pet alone when no other session is open', OWNERS, async ($, on) => {
   const { clock } = boot(on, { DECK_SESSIONS: 'none' })
   await start($, clock)
-  const sessions = (await boxesOf($))[3]
+  const tree = await mountDeck($)
 
-  expect(find(sessions, 'Raster')?.props?.key).toBe('pet')
+  expect(tracksOf(tree)).toContain('sessions')
+  expect(find(tree, 'Raster')?.props?.key).toBe('pet')
 })
 
 test('leaves the sessions panel out with the pet off and no other session open', OWNERS, async ($, on) => {
   const { clock } = boot(on, { DECK_PET: 'off', DECK_SESSIONS: 'none' })
   await start($, clock)
 
-  expect(await boxesOf($)).toHaveLength(3)
+  expect(tracksOf(await mountDeck($))).not.toContain('sessions')
 })
 
 test('repaints the pet alone, by blit, while it moves', OWNERS, async ($, on) => {

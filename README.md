@@ -5,7 +5,7 @@ Mods for [Claude Code](https://claude.com/claude-code): plugins of function hook
 | Mod | In one line |
 | --- | --- |
 | [`confetti`](#-confetti) | A burst of pixel confetti when a job ends as All done |
-| [`deck`](#️-deck) | The plan, your limits, the turn and your sessions in one tab of boxed panels |
+| [`deck`](#️-deck) | The plan, your limits, the turn and your sessions in one tab, drawn as a train line |
 | [`clean-view`](#-clean-view) | Hides Claude's tool calls and shows its plan as a checklist |
 | [`fold-view`](#-fold-view) | Folds every tool call to one line a click opens |
 | [`status-band`](#-status-band) | Model, git, cost and your usage limits as bars, plus a pet |
@@ -54,13 +54,13 @@ Each card covers one mod: what it does, what to type and what you can set. Setti
 
 ### 🗂️ `deck`
 
-- **What:** one tab of the side pane, `Deck`, in place of the `Steps`, `Status`, `Waterfall` and `Sessions` tabs. A header line names the model and the job's state (`DECK · Opus 5.5 xhigh · ▶ 2/4 · 1m 12s`). Under it are four boxed panels:
-  - **plan:** the steps and their meters.
-  - **limits:** 5H, 7D, Codex and context as flat bars with their reset times, then your folder and git state.
-  - **timeline:** this turn's tool calls as bars over time, or the last turn's.
+- **What:** one tab of the side pane, `Deck`, in place of the `Steps`, `Status`, `Waterfall` and `Sessions` tabs, drawn as a train line. A header says where the job is and names the model (`DECK ▶ stop 2 of 4 · 1m 12s`, `Opus 5.5 xhigh` at the right). Under it, each section sits under a track, a heavy rule with its name:
+  - **plan:** the job is the line and its steps are stations down it: `✓` passed, `◉` the one at work with its meter, `○` ahead. A held job shows at the station: `‖` waiting on you, `!` failing, `■` stopped.
+  - **limits:** 5H, 7D, Codex and context as flat bars, each with a mark where its window's pace is. A bar turns to your theme's warning color while you use it faster than its window passes. Then your folder and git state.
+  - **timeline:** this turn's tool calls as bars over time, from the moment the turn starts (`no tool calls yet`), or the last turn's.
   - **sessions:** your other Claude Code sessions, a row each: `?` needs you, `○` waiting, `◌` shell, `●` working. Under them stands the pet, Clawd, moving as he does in the Sessions pane. Only his picture is repainted, never the whole pane.
 
-  Each box has its own color from your theme, dimmed while it rests (a finished job, a turn that is over). A panel with nothing to show takes no room: no timeline before the first tool call, and no sessions while no other session is open and the pet is off.
+  While Claude works, a train runs down the tracks one after another, and down the line beside the station at work. At rest the tracks are still. The trains are drawn on their own clock, so they never redraw the rest of the pane. Every color is a key of your theme, so the Deck reads in light and dark themes alike. A section with nothing to show takes no room: no timeline before the first turn, and no sessions while no other session is open and the pet is off.
 - **Outside fullscreen**, where there is no side pane, the Deck stands above the prompt as a summary of four rows at most: the header, the step at work, `5H 66% · 7D 8% · ctx 6%`, and the turn or your sessions.
 - **Type:**
   - `/deck` closes it, or brings it to the front.
@@ -69,6 +69,7 @@ Each card covers one mod: what it does, what to type and what you can set. Setti
 - **Set:**
   - `openOnStart` (on): open the Deck when a session starts.
   - `panels` (`plan,limits,timeline,sessions`): which panels show, and in what order.
+  - `motion` (on): run the trains while Claude works. Off, the tracks stay still rules.
 - **Works with:**
   - It needs `clean-view`, `status-band` and `tool-waterfall`, which lend it their panels.
   - Closed, status-band's band comes back above the prompt, so nothing goes missing.

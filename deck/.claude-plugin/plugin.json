@@ -23,6 +23,12 @@
       "title": "Panels",
       "description": "Which panels the Deck shows, in order, a comma between two: plan, limits, timeline, sessions",
       "default": "plan,limits,timeline,sessions"
+    },
+    "motion": {
+      "type": "boolean",
+      "title": "Motion",
+      "description": "Run the trains along the tracks and down the route while Claude works; off, the tracks stay still rules",
+      "default": true
     }
   }
 }

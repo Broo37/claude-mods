@@ -3,7 +3,7 @@ import type { EngineInterface, Register, Timer } from 'claude-code'
 
 import type { DeckTop } from '../types'
 
-import { BORDERS, headerOf, miniOf, orderOf, panelsFrom } from './frame'
+import { INK, miniOf, orderOf, panelsFrom, routeOf, trackOf, tripOf } from './frame'
 import type { DeckPanel, DeckPanelId, DeckRun } from './frame'
 
 // The Deck: one tab of the side pane in place of Steps, Status, Waterfall and
@@ -15,9 +15,6 @@ import type { DeckPanel, DeckPanelId, DeckRun } from './frame'
 
 const PANE = { id: 'deck', title: 'Deck', columns: 32 }
 
-// A panel's round border and a cell of room each side of its rows.
-const FRAME = 4
-
 // The narrowest a panel's rows are asked for, however narrow the pane.
 const NARROWEST = 10
 
@@ -26,6 +23,9 @@ const NARROWEST = 10
 const TIMELINE_ROWS = 10
 
 const SESSIONS_ROWS = 8
+
+// How many rows of route the spur under the station at work takes.
+const SPUR_ROWS = 2
 
 // How often the Deck redraws while a panel moves on its own, so its clocks and bars move.
 const TICK_MS = 1000
@@ -209,6 +209,7 @@ const lookOf = (run: DeckRun) => ({
 export const register: Register = (on, options) => {
   const isOpenAtStart = options.openOnStart !== false
   const panels = panelsFrom(options.panels)
+  const isMotion = options.motion !== false
 
   on('session.start', async ($, e, next) => {
     await $.command.register({
@@ -304,10 +305,12 @@ export const register: Register = (on, options) => {
       )
     }
 
-    const lent = await panelsOf($, panels, Math.max(NARROWEST, e.props.bodyColumns - FRAME))
+    const width = Math.max(NARROWEST, e.props.bodyColumns)
+    const lent = await panelsOf($, panels, width)
     const order = orderOf(panels, await read($, top))
     // The pet, where the surface draws rasters and the sessions are shown.
     const PetRaster = e.surface === 'terminal' ? $.ui.resolve(e).Raster : undefined
+    const Client = e.surface === 'terminal' && isMotion ? $.ui.resolve(e).Client : undefined
     const pet = PetRaster !== undefined && panels.includes('sessions') ? await $.statusBand.pet().catch(() => null) : null
     petAt = pet === null ? null : e.requestId
 
@@ -316,29 +319,86 @@ export const register: Register = (on, options) => {
       petLookAt = pet.isStill ? (await $.clock.now()) + PET_REST_MS : 0
     }
 
-    const isShown = (panel: DeckPanel) => panel.rows.length > 0 || (panel.id === 'sessions' && pet !== null)
+    // The trains run while any panel moves on its own: Claude is working.
+    const isMoving = lent.some(panel => panel.isLive === true)
+    const plan = lent.find(panel => panel.id === 'plan')
+    const model = lent.find(panel => panel.id === 'limits')?.label ?? []
+    const isShown = (panel: DeckPanel) =>
+      panel.rows.length > 0 || (panel.stops?.length ?? 0) > 0 || (panel.id === 'sessions' && pet !== null)
     const shown = order.flatMap(id => lent.filter(panel => panel.id === id && isShown(panel)))
     keepTime($, lent)
 
+    // A track: the track module where the surface runs one and motion is on, else a still rule.
+    // The train's trip, in reading order: each track, and the spur after the
+    // route's track when a station is at work. A track's leg runs in at its
+    // left and out past its right; the spur's down its rows.
+    const routeRows = (panel: DeckPanel) => routeOf(panel.stops ?? [], panel.phase ?? 'working', width)
+    const trip = tripOf(
+      shown.flatMap(panel => [
+        { key: `track-${panel.id}`, lap: width + 2 },
+        ...(routeRows(panel).some(row => row.kind === 'spur') ? [{ key: 'spur', lap: SPUR_ROWS + 2 }] : []),
+      ]),
+    )
+    const legOf = (key: string, lap: number) => ({ start: trip.starts[key] ?? 0, lap, cycle: trip.cycle })
+
+    const trackFor = (panel: DeckPanel) => {
+      const isRoute = (panel.stops?.length ?? 0) > 0
+      const label = isRoute ? (panel.name ?? panel.title) : panel.title
+      const right = isRoute ? '' : panel.right
+      const ink = isRoute ? INK.route : INK.here
+
+      return Client === undefined ? (
+        <Box>{textsOf(trackOf(label, right, width, { color: ink, isBold: true }))}</Box>
+      ) : (
+        <Client
+          key={`track-${panel.id}`}
+          module="./track.tsx"
+          width={width}
+          height={1}
+          props={{ label, right, width, active: isMoving, line: INK.route, train: INK.train, ink, dim: INK.ahead, ...legOf(`track-${panel.id}`, width + 2) }}
+        />
+      )
+    }
+
+    const spur =
+      Client === undefined ? (
+        <Box flexDirection="column">
+          <Text color={INK.route}>┃</Text>
+          <Text color={INK.route}>┃</Text>
+        </Box>
+      ) : (
+        <Client
+          key="spur"
+          module="./spur.tsx"
+          width={2}
+          height={SPUR_ROWS}
+          props={{ rows: SPUR_ROWS, active: isMoving, line: INK.route, train: INK.train, ...legOf('spur', SPUR_ROWS + 2) }}
+        />
+      )
+
+    const bodyOf = (panel: DeckPanel) => {
+      if ((panel.stops?.length ?? 0) > 0) {
+        return routeRows(panel).map(row =>
+          row.kind === 'station' ? <Box>{textsOf(row.runs)}</Box> : row.kind === 'link' ? <Text color={INK.route}>┃</Text> : spur,
+        )
+      }
+
+      return panel.rows.map(row => <Box>{textsOf(row)}</Box>)
+    }
+
     return (
       <Box flexDirection="column">
-        <Box>{textsOf(headerOf(lent, e.props.bodyColumns))}</Box>
+        <Box>
+          <Text bold>DECK</Text>
+          <Text> </Text>
+          {textsOf(plan?.label ?? [])}
+          <Box flexGrow={1} />
+          {textsOf(model)}
+        </Box>
         {shown.map(panel => (
-          <Box
-            borderStyle="round"
-            borderColor={BORDERS[panel.id as DeckPanelId] ?? 'inactive'}
-            {...(panel.isLive === false && { borderDimColor: true })}
-            flexDirection="column"
-            paddingX={1}
-          >
-            <Box>
-              <Text bold>{panel.title}</Text>
-              <Box flexGrow={1} />
-              <Text dimColor>{panel.right}</Text>
-            </Box>
-            {panel.rows.map(row => (
-              <Box>{textsOf(row)}</Box>
-            ))}
+          <Box flexDirection="column" marginTop={1}>
+            {trackFor(panel)}
+            {bodyOf(panel)}
             {panel.id === 'sessions' && pet !== null && PetRaster !== undefined ? (
               <Box marginTop={panel.rows.length > 0 ? 1 : 0}>
                 <PetRaster key="pet" columns={pet.columns} rows={pet.rows} cells={pet.cells} />
