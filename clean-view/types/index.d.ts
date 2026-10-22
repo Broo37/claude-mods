@@ -57,7 +57,15 @@ export type CleanViewRun = { text: string; color?: string; isBold?: boolean; isD
 
 // The checklist as a panel another mod draws in a box of its own (the Deck): a
 // title and what stands at its right, a label for that mod's header, and rows.
-export type CleanViewPanel = { id: 'plan'; title: string; right: string; label: CleanViewRun[]; rows: CleanViewRun[][] }
+export type CleanViewPanel = {
+  id: 'plan'
+  title: string
+  right: string
+  label: CleanViewRun[]
+  rows: CleanViewRun[][]
+  // Whether the panel moves on its own: a job that runs, or waits on the person.
+  isLive?: boolean
+}
 
 // The mod that hosts the checklist, and whether its pane is in the dock now.
 export type CleanViewHost = { by: string; isDocked: boolean }

@@ -441,3 +441,10 @@ test("keeps the plan panel's rows within its width", () => {
     }
   }
 })
+
+test('marks the plan panel live while a job runs or waits on the person, and still otherwise', () => {
+  expect(planPanelOf(halfway(), NOW, 43, 0).isLive).toBe(true)
+  expect(planPanelOf(needsYou(planned(), REASONS.ok), NOW, 43, 0).isLive).toBe(true)
+  expect(planPanelOf(finished(), NOW, 43, 0).isLive).toBe(false)
+  expect(planPanelOf(IDLE, NOW, 43, 0).isLive).toBe(false)
+})

@@ -467,4 +467,5 @@ export const planPanelOf = (list: Checklist, now: number, columns: number, tick:
   right: '',
   label: labelOf(list, now),
   rows: list.phase === 'idle' ? [] : paneLinesOf(list, now, columns, tick),
+  isLive: list.phase === 'working' || list.phase === 'needs-you',
 })
