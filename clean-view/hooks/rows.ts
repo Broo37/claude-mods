@@ -22,7 +22,7 @@ export const DOCK_TAB = 'Steps'
 export const TAB_MARKS: Record<Checklist['phase'], string> = {
   idle: '',
   working: ' ▶',
-  'needs-you': ' ‖',
+  'needs-you': ' ?',
   stuck: ' ⚠',
   stopped: ' ■',
   done: ' ✓',
@@ -197,13 +197,18 @@ const meterOf = (isLit: (cell: number) => boolean, color: string): Run[] => {
   return runs
 }
 
-// The current step's mark, by what the job is doing: at work, held, or stopped.
+// The current step's mark, by what the job is doing: at work, waiting on the
+// person (the '?' the Deck and the sessions use too), stuck, or stopped.
 const markOf = (phase: Checklist['phase']): Run => {
   if (phase === 'stopped') {
     return { text: '■ ', color: 'error' }
   }
 
-  return phase === 'needs-you' || phase === 'stuck' ? { text: '‖ ', color: 'warning' } : { text: '▶ ', color: 'claude' }
+  if (phase === 'needs-you') {
+    return { text: '? ', color: 'warning' }
+  }
+
+  return phase === 'stuck' ? { text: '‖ ', color: 'warning' } : { text: '▶ ', color: 'claude' }
 }
 
 // A meter that sweeps: a step at work that has reported nothing yet.

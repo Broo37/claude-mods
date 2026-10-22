@@ -116,17 +116,17 @@ test('sweeps the meter of a step nothing was reported for yet, and calls it Work
   expect(linesOf(planned(), 9)[0]?.endsWith('██░░░░░░░█  Working')).toBe(true)
 })
 
-test('pauses the current step while the job waits on the person', () => {
+test('marks the current step ? while the job waits on the person, as the Deck does', () => {
   const [, current = ''] = linesOf(needsYou(halfway(), REASONS.ok))
 
-  expect(current).toBe(`${'‖ 🔨 Build the pricing section'.padEnd(32)}██████░░░░  60%`)
+  expect(current).toBe(`${'? 🔨 Build the pricing section'.padEnd(32)}██████░░░░  60%`)
 })
 
 test('says Paused, with no sweep, for a step nothing was reported for while the job waits or is stuck', () => {
-  const paused = `${'‖ 📖 Read your brand notes'.padEnd(32)}░░░░░░░░░░  Paused`
+  const paused = (mark: string) => `${`${mark} 📖 Read your brand notes`.padEnd(32)}░░░░░░░░░░  Paused`
 
-  expect(linesOf(needsYou(planned(), REASONS.ok), 4)[0]).toBe(paused)
-  expect(linesOf(stuck(planned(), REASONS.saidNo), 4)[0]).toBe(paused)
+  expect(linesOf(needsYou(planned(), REASONS.ok), 4)[0]).toBe(paused('?'))
+  expect(linesOf(stuck(planned(), REASONS.saidNo), 4)[0]).toBe(paused('‖'))
 })
 
 test('says Stopped for the step the person interrupted', () => {
@@ -210,7 +210,7 @@ test('wraps a long step name under itself in a narrow tab, and the job and the r
     'Claude needs your OK to',
     'continue',
     ' ',
-    '‖ 🧪 Write the tests for',
+    '? 🧪 Write the tests for',
     '     the stacked layout',
     '     ░░░░░░░░░░  Paused',
   ])

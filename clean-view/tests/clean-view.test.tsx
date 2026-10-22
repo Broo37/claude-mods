@@ -550,7 +550,7 @@ test('shows Needs you when a permission prompt opens, and pauses the current ste
   const [header, current] = await bandOf($)
 
   expect(header).toBe(` Needs you  Claude needs your OK to continue${ON}`)
-  expect(current?.startsWith('  ‖ 📖 Read your brand notes')).toBe(true)
+  expect(current?.startsWith('  ? 📖 Read your brand notes')).toBe(true)
 })
 
 test('shows Needs you the moment permission is asked for', async ($, on) => {
@@ -1052,7 +1052,7 @@ test('marks the checklist tab with what the job is doing while the other tab is 
 
   await $.classic.Notification({ message: 'Claude needs your permission to use Bash', notification_type: 'permission_prompt' })
 
-  expect(await tabs()).toBe(`${TABS.status(' ‖')}${ON}`)
+  expect(await tabs()).toBe(`${TABS.status(' ?')}${ON}`)
 
   await report($, 'Polish the footer', 100)
   await finish($, clock)

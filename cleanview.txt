@@ -27,8 +27,8 @@ The header changes with the state of the job:
 | State | Header shows |
 |---|---|
 | Working | Job name · time running |
-| Needs you | Highlighted **Needs you** badge and the reason, e.g. "Claude needs your OK to continue". The current step's ▶ becomes ‖ |
-| Stuck | ⚠ Stuck: the reason, in one plain sentence |
+| Needs you | Highlighted **Needs you** badge and the reason, e.g. "Claude needs your OK to continue". The current step's ▶ becomes ? |
+| Stuck | ⚠ Stuck: the reason, in one plain sentence. The current step's ▶ becomes ‖ |
 | Stopped | ■ Stopped · job name · you pressed Esc |
 | Done | ✓ All done · job name · took 2m 14s. After 5 seconds it shrinks to one line |
 
