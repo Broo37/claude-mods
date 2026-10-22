@@ -116,7 +116,8 @@ test('marks each station by where it stands: passed, here, ahead', () => {
 test('marks the station at work by what holds the job', () => {
   const here = (phase: string) => stationsOf(routeOf(STOPS, phase, 43))[1]?.[0]
 
-  expect(here('needs-you')).toBe('‖')
+  // The same mark as the header's '? needs you' and a session that needs you.
+  expect(here('needs-you')).toBe('?')
   expect(here('stuck')).toBe('!')
   expect(here('stopped')).toBe('■')
 })

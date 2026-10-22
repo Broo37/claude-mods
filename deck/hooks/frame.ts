@@ -124,7 +124,7 @@ const METER = 6
 
 // The station at work, by what holds the job: at work, waiting on the person, failing, stopped.
 const HERE: Record<string, DeckRun> = {
-  'needs-you': { text: '‖', color: INK.held, isBold: true },
+  'needs-you': { text: '?', color: INK.held, isBold: true },
   stuck: { text: '!', color: INK.fault, isBold: true },
   stopped: { text: '■', color: INK.fault, isBold: true },
 }
