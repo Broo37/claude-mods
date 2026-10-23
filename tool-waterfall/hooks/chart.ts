@@ -117,12 +117,16 @@ const cut = (label: string, width: number) => (label.length > width ? `${label.s
 // A label in exactly its width.
 const fitted = (label: string, width: number) => cut(label, width).padEnd(width)
 
+// How the Deck draws the chart, where the pane draws it its own way: `name` is
+// the ink a call's tool name is drawn in, kept quiet so the bars carry the
+// color, and `lane` the ink of the dotted lane a bar runs along as a thin line,
+// as Flightdeck draws its lanes and as thin as the Deck's tracks.
+export type Look = { name: string; lane: string }
+
 // The lines of the chart for a pane of that many columns and rows: a heading,
 // the span of time, and a bar a call. `elapsed` is how far into the turn it is
 // now, which is what a turn that still runs is charted against.
-// `nameColor` is the ink a call's tool name is drawn in, where it is not the
-// tool's own: the Deck keeps its names quiet and lets the bars carry the color.
-export const linesOf = (turn: Turn | null, elapsed: number, columns: number, rows: number, nameColor?: string): Run[][] => {
+export const linesOf = (turn: Turn | null, elapsed: number, columns: number, rows: number, look?: Look): Run[][] => {
   if (turn === null) {
     return [[{ text: 'No turn yet. Tool calls show here as Claude works.', isDim: true }]]
   }
@@ -171,15 +175,20 @@ export const linesOf = (turn: Turn | null, elapsed: number, columns: number, row
       const to = Math.min(width, Math.max(from + 1, Math.ceil((until / total) * width)))
       const color = call.isError ? 'error' : colorOf(call.tool)
       const took = tookOf(until - call.start)
-      const name: Run = { text: nameOf(call.tool).padEnd(NAME), color: nameColor ?? colorOf(call.tool) }
-      const bar: Run[] = [
-        ...(from > 0 ? [{ text: ' '.repeat(from) }] : []),
-        { text: '█'.repeat(to - from), color },
-        { text: ' '.repeat(width - to + 1) },
-        call.isError
-          ? { text: `✗ ${took}`.padStart(TIME), color: 'error' }
-          : { text: `${took}${call.end === null ? '…' : ''}`.padStart(TIME), isDim: true },
-      ]
+      const name: Run = { text: nameOf(call.tool).padEnd(NAME), color: look?.name ?? colorOf(call.tool) }
+      const time: Run = call.isError
+        ? { text: `✗ ${took}`.padStart(TIME), color: 'error' }
+        : { text: `${took}${call.end === null ? '…' : ''}`.padStart(TIME), isDim: true }
+      const dots = (cells: number, lane: string): Run[] => (cells > 0 ? [{ text: '·'.repeat(cells), color: lane }] : [])
+      const bar: Run[] =
+        look === undefined
+          ? [
+              ...(from > 0 ? [{ text: ' '.repeat(from) }] : []),
+              { text: '█'.repeat(to - from), color },
+              { text: ' '.repeat(width - to + 1) },
+              time,
+            ]
+          : [...dots(from, look.lane), { text: '━'.repeat(to - from), color }, ...dots(width - to, look.lane), { text: ' ' }, time]
 
       if (!isStacked) {
         return [[name, { text: `${fitted(call.label, label)} `, isDim: true }, ...bar]]

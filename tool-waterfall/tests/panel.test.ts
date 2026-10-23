@@ -46,8 +46,8 @@ test('titles an ended turn last turn, with its failures at its right, and keeps 
   expect(timelinePanelOf(ENDED, 0, 43, 10)).toMatchObject({ title: 'last turn', right: '41s · 2 tools · 1 failed', isLive: false })
 })
 
-test('lends the chart without its heading, the tool names in the quiet ink', () => {
-  expect(timelinePanelOf(ENDED, 0, 43, 10).rows).toEqual(linesOf(ENDED, 0, 43, 11, 'inactive').slice(1))
+test('lends the chart without its heading, in the Deck look', () => {
+  expect(timelinePanelOf(ENDED, 0, 43, 10).rows).toEqual(linesOf(ENDED, 0, 43, 11, { name: 'inactive', lane: 'subtle' }).slice(1))
 })
 
 test('draws a tool name quietly in the Deck and keeps its color on the bar', () => {
@@ -56,7 +56,18 @@ test('draws a tool name quietly in the Deck and keeps its color on the bar', () 
 
   expect(read?.[0]?.text.trim()).toBe('Read')
   expect(read?.[0]?.color).toBe('inactive')
-  expect(bar?.find(run => run.text.startsWith('█'))?.color).toBe('suggestion')
+  expect(bar?.find(run => run.text.startsWith('━'))?.color).toBe('suggestion')
+})
+
+test('draws a bar as a thin line along a dotted lane, as Flightdeck draws its lanes', () => {
+  const [, , read, , bash] = timelinePanelOf(ENDED, 0, 43, 10).rows
+
+  // Read ran first, Bash after it: Bash's lane is dotted before its bar and after it.
+  expect(plain([read ?? []])[0]).toMatch(/^━+·+ +1\.2s$/)
+  expect(plain([bash ?? []])[0]).toMatch(/^·+━+·+ +✗ 7\.5s$/)
+  expect(bash?.filter(run => run.text.startsWith('·')).map(run => run.color)).toEqual(['subtle', 'subtle'])
+  expect(plain([read ?? [], bash ?? []]).map(row => row.length)).toEqual([43, 43])
+  expect(plain(timelinePanelOf(ENDED, 0, 43, 10).rows).some(row => row.includes('█'))).toBe(false)
 })
 
 test('keeps within the rows asked for, the oldest calls under +N earlier', () => {

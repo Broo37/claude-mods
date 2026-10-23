@@ -1,7 +1,11 @@
 import type { ToolWaterfallPanel } from '../types'
 
 import { linesOf } from './chart'
-import type { Turn } from './chart'
+import type { Look, Turn } from './chart'
+
+// The Deck's look: tool names quiet, each bar a thin line along a dotted lane
+// in the subtle ink its limit bars rest on.
+const DECK: Look = { name: 'inactive', lane: 'subtle' }
 
 // The chart as a panel of the Deck: its heading becomes the panel's title and
 // what stands at its right, and its lines the panel's rows, within the rows
@@ -18,7 +22,7 @@ export const timelinePanelOf = (turn: Turn | null, elapsed: number, columns: num
 
   // The chart counts its heading among its rows. Its '…' says the turn runs on,
   // which the Deck says in words.
-  const [heading = [], ...body] = linesOf(turn, elapsed, columns, rows + 1, 'inactive')
+  const [heading = [], ...body] = linesOf(turn, elapsed, columns, rows + 1, DECK)
   const right = heading
     .map(run => run.text)
     .join('')
