@@ -103,10 +103,11 @@ test('a bar keeps at least five cells in a narrow panel', () => {
   expect(bar.length).toBe(5)
 })
 
-test('the pace of the five-hour window is marked on its bar', () => {
+test('the pace of the five-hour window shows on its bar where the ink changes, with no mark of its own', () => {
   const bar = /^5H {2}(\S+) /.exec(rowsAt(VIEW, 43)[0] ?? '')?.[1] ?? ''
 
-  expect(/[╂┃]/.test(bar)).toBe(true)
+  expect(bar).toMatch(/^━+·+$/)
+  expect(/[█╂┃┿│]/.test(bar)).toBe(false)
 })
 
 test('before anything is read the panel says it is loading', () => {
@@ -213,27 +214,81 @@ test('sums the sessions up in one line, saying how many need you', () => {
   expect(plain(sessionsPanelOf({ ...VIEW, peers: PEERS.slice(0, 1) }, 43, 8).summary ?? [])).toBe('1 open')
 })
 
-// ── Flat bars, one ink ──────────────────────────────────────────────────────
+// ── Flat bars in zones ──────────────────────────────────────────────────────
 
-const barRunsOf = (row: readonly StatusBandRun[]) => row.filter(run => /^[█─╂┃]+$/.test(run.text))
+const barRunsOf = (row: readonly StatusBandRun[]) => row.filter(run => /^[━─·]+$/.test(run.text))
 
-test('draws each bar flat: one ink for what is used, a subtle line for the rest, no ramp', () => {
-  const sevenDay = barRunsOf(limitsPanelOf(VIEW, 43).rows[1] ?? [])
-
-  const row = limitsPanelOf(VIEW, 43).rows[1] ?? []
-
-  expect(row.every(run => run.color?.startsWith('rgb(') !== true)).toBe(true)
-  expect(sevenDay.filter(run => run.text.includes('█')).map(run => run.color)).toEqual(['text'])
-  expect(row.find(run => run.text.trim() === '8%')).toMatchObject({ color: 'text', isBold: true })
-  expect(sevenDay.filter(run => /^─+$/.test(run.text)).every(run => run.color === 'subtle')).toBe(true)
+// The five-hour window as the view reads it, `percentUsed` used, resetting
+// `left` minutes after noon: 150 minutes left is half the window gone.
+const fiveHourAt = (percentUsed: number, left: number): View => ({
+  ...VIEW,
+  limits: [
+    { kind: 'five_hour', percentUsed, resetsAt: NOW + left * MINUTE },
+    { kind: 'seven_day', percentUsed: 8, resetsAt: new Date(2026, 9, 28, 22, 0).getTime() },
+  ],
 })
 
-test('turns a bar to warning while it runs ahead of its window', () => {
-  // 66% used with half the five-hour window gone.
-  const fiveHour = barRunsOf(limitsPanelOf(VIEW, 43).rows[0] ?? [])
+const zonesOf = (runs: readonly StatusBandRun[]) => runs.map(run => [run.text[0], run.color])
 
-  expect(fiveHour.filter(run => run.text.includes('█')).map(run => run.color)).toEqual(['warning'])
-  expect((limitsPanelOf(VIEW, 43).rows[0] ?? []).find(run => run.text.trim() === '66%')?.color).toBe('warning')
+test('draws a bar in zones: a heavy line for what is used, a light line up to the pace, dots beyond, no ramp', () => {
+  // 20% used with half the five-hour window gone.
+  const row = limitsPanelOf(fiveHourAt(20, 150), 43).rows[0] ?? []
+  const fiveHour = barRunsOf(row)
+  const width = fiveHour.reduce((cells, run) => cells + run.text.length, 0)
+
+  expect(row.every(run => run.color?.startsWith('rgb(') !== true)).toBe(true)
+  expect(zonesOf(fiveHour)).toEqual([
+    ['━', 'text'],
+    ['─', 'inactive'],
+    ['·', 'subtle'],
+  ])
+  // The light line ends on the cell the pace falls on.
+  expect((fiveHour[0]?.text.length ?? 0) + (fiveHour[1]?.text.length ?? 0)).toBe(Math.floor(width / 2) + 1)
+  expect(row.find(run => run.text.trim() === '20%')).toMatchObject({ color: 'text', isBold: true })
+})
+
+test('turns the part of a bar past its pace to warning while it runs ahead of its window', () => {
+  // 66% used with half the five-hour window gone.
+  const row = limitsPanelOf(VIEW, 43).rows[0] ?? []
+  const fiveHour = barRunsOf(row)
+  const width = fiveHour.reduce((cells, run) => cells + run.text.length, 0)
+
+  expect(zonesOf(fiveHour)).toEqual([
+    ['━', 'text'],
+    ['━', 'warning'],
+    ['·', 'subtle'],
+  ])
+  expect(fiveHour[0]?.text.length).toBe(Math.floor(width / 2))
+  expect(row.find(run => run.text.trim() === '66%')?.color).toBe('warning')
+})
+
+test('rounding to cells never puts a bar on the wrong side of its pace', () => {
+  // Five cells: a pace of 45% falls on the third. 46% would round to two
+  // cells, under the pace; one point ahead still shows warning.
+  const ahead = barRunsOf(limitsPanelOf(fiveHourAt(46, 165), 24).rows[0] ?? [])
+  // A pace of 59% falls on the third cell too. 55% would round to three
+  // cells, over it; four points behind still stops short of it.
+  const behind = barRunsOf(limitsPanelOf(fiveHourAt(55, 123), 24).rows[0] ?? [])
+
+  expect(zonesOf(ahead)).toEqual([
+    ['━', 'text'],
+    ['━', 'warning'],
+    ['·', 'subtle'],
+  ])
+  expect(zonesOf(behind)).toEqual([
+    ['━', 'text'],
+    ['─', 'inactive'],
+    ['·', 'subtle'],
+  ])
+})
+
+test('a bar with no pace, as the context, is a heavy line on dots', () => {
+  const context = barRunsOf(limitsPanelOf(VIEW, 43).rows[3] ?? [])
+
+  expect(zonesOf(context)).toEqual([
+    ['━', 'text'],
+    ['·', 'subtle'],
+  ])
 })
 
 test('leaves the names of the other sessions in the plain text ink', () => {

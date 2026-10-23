@@ -56,7 +56,7 @@ Each card covers one mod: what it does, what to type and what you can set. Setti
 
 - **What:** one tab of the side pane, `Deck`, in place of the `Steps`, `Status`, `Waterfall` and `Sessions` tabs, drawn as a train line. A header says where the job is and names the model (`DECK ▶ stop 2 of 4 · 1m 12s`, `Opus 5.5 xhigh` at the right). Under it, each section sits under a track, a heavy rule with its name:
   - **plan:** the job is the line and its steps are stations down it: `✓` passed, `◉` the one at work with its meter, `○` ahead. A held job shows at the station: `?` waiting on you (the same mark as in the header and the sessions), `!` failing, `■` stopped.
-  - **limits:** 5H, 7D, Codex and context as flat bars, each with a mark where its window's pace is. A bar turns to your theme's warning color while you use it faster than its window passes. Then your folder and git state.
+  - **limits:** 5H, 7D, Codex and context as thin bars in zones: a heavy line for what you used, a light line up to where its window's pace stands, dots beyond. Use a window faster than it passes and the part of the line past the pace turns to your theme's warning color. Then your folder and git state.
   - **timeline:** this turn's tool calls as thin bars along dotted lanes, over time, from the moment the turn starts (`no tool calls yet`), or the last turn's.
   - **sessions:** your other Claude Code sessions, a row each: `?` needs you, `○` waiting, `◌` shell, `●` working. Under them stands the pet, Clawd, moving as he does in the Sessions pane. Only his picture is repainted, never the whole pane.
 

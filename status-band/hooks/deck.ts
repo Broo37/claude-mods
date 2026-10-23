@@ -90,21 +90,38 @@ const barRowsOf = (view: View): BarRow[] => {
   ]
 }
 
-// What a bar is drawn in: what is used in plain text, in warning while it runs
-// ahead of its window; what remains a subtle line, its pace a heavier stroke.
-const INK = { used: 'text', ahead: 'warning', rest: 'subtle', pace: 'inactive' } as const
+// What a bar is drawn in: what is used in plain text, the part of it past its
+// window's pace in warning; the way left up to the pace a quiet line, and
+// what lies beyond the pace subtle dots.
+const INK = { used: 'text', ahead: 'warning', toPace: 'inactive', rest: 'subtle' } as const
 
-// One flat bar: a solid run for what is used and a thin line for the rest, the
-// cell the pace falls on struck through. Neighbours of one ink make one run.
+// Rounding to cells must not put a bar on the wrong side of its pace: one
+// ahead of its window fills past the pace's cell, one behind stops short of it.
+const filledOf = (row: BarRow, width: number, marked: number): number => {
+  const rounded = Math.round((clampPercent(row.percent) * width) / 100)
+
+  if (row.pace === undefined || row.percent === row.pace) {
+    return rounded
+  }
+
+  return row.percent > row.pace ? Math.max(rounded, marked + 1) : Math.min(rounded, marked)
+}
+
+// One flat bar in zones: a heavy line for what is used, a light line from
+// there to the cell the pace falls on, dots beyond. The pace has no mark of
+// its own; it stands where the light line ends or, on a bar ahead of its
+// window, where the heavy line turns warning. Neighbours of one ink make one run.
 const flatBar = (row: BarRow, width: number): StatusBandRun[] => {
-  const filled = Math.round((clampPercent(row.percent) * width) / 100)
   const marked = row.pace === undefined ? -1 : Math.min(width - 1, Math.floor((clampPercent(row.pace) * width) / 100))
-  const used = row.pace !== undefined && row.percent > row.pace ? INK.ahead : INK.used
+  const filled = filledOf(row, width, marked)
+  const isAhead = row.pace !== undefined && row.percent > row.pace
 
   return Array.from({ length: width }, (_, at): StatusBandRun =>
     at < filled
-      ? { text: at === marked ? '┃' : '█', color: used }
-      : { text: at === marked ? '╂' : '─', color: at === marked ? INK.pace : INK.rest },
+      ? { text: '━', color: isAhead && at >= marked ? INK.ahead : INK.used }
+      : at <= marked
+        ? { text: '─', color: INK.toPace }
+        : { text: '·', color: INK.rest },
   ).reduce<StatusBandRun[]>((runs, run) => {
     const last = runs.at(-1)
 
