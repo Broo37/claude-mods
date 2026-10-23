@@ -85,23 +85,9 @@ const STATUS_BAND: Plugin = {
       rows: [[{ text: '○ geisa-pk  waiting 29m' }], [{ text: '● claude-mods  working 4m' }]],
       summary: [{ text: '2 open' }],
     }
-    // A frame of the pet: spaces whose ink tells one frame from the next, as a Raster takes them.
-    const cellsOf = (n: number) => {
-      const words = new Uint32Array(24 * 8 * 3)
-
-      for (let i = 0; i < 24 * 8; i += 1) {
-        words[i * 3] = 0x20
-        words[i * 3 + 1] = n & 0xffffff
-        words[i * 3 + 2] = 0x01000000
-      }
-
-      return (new Uint8Array(words.buffer) as Uint8Array & { toBase64(): string }).toBase64()
-    }
-    let frames = 0
-
     on('engine.create', async ($, e, next) => ({
       ...(await next(e)),
-      statusBand: { panel: async () => limits, host: async () => false, pet: async () => null },
+      statusBand: { panel: async () => limits, host: async () => false },
     }))
     on('statusBand.panel', async ($, e) => {
       if (e.id === 'sessions') {
@@ -114,17 +100,6 @@ const STATUS_BAND: Plugin = {
       }
 
       return { value: limits }
-    })
-    on('statusBand.pet', async $ => {
-      const way = await $.env.get('DECK_PET')
-
-      if (way === 'off') {
-        return { value: null }
-      }
-
-      frames += 1
-
-      return { value: { columns: 24, rows: 8, cells: cellsOf(way === 'still' ? 1 : frames), isStill: way === 'still' } }
     })
     on('command.run', { command: 'touch-view' }, async $ => {
       await $.state.set({ plugin: 'status-band', key: 'view' }, { now: 1 } as never)
@@ -725,67 +700,20 @@ test('stands two columns off the pane at both sides, its tracks as wide as the r
   expect(tracks.every(line => line.length === 47 - 2 * 2)).toBe(true)
 })
 
-test('draws the pet under the sessions on the terminal', OWNERS, async ($, on) => {
-  const { clock } = boot(on)
-  await start($, clock)
-  const pet = find(await mountDeck($), 'Raster')
-
-  expect(pet?.props).toMatchObject({ key: 'pet', columns: 24, rows: 8 })
-})
-
-test('draws no pet on a surface that has no raster', OWNERS, async ($, on) => {
-  const { clock } = boot(on)
-  await start($, clock)
-
-  expect(find(await mountDeck($, 'desktop'), 'Raster')).toBeUndefined()
-})
-
-test('keeps the sessions panel for the pet alone when no other session is open', OWNERS, async ($, on) => {
-  const { clock } = boot(on, { DECK_SESSIONS: 'none' })
-  await start($, clock)
-  const tree = await mountDeck($)
-
-  expect(tracksOf(tree)).toContain('sessions')
-  expect(find(tree, 'Raster')?.props?.key).toBe('pet')
-})
-
-test('leaves the sessions panel out with the pet off and no other session open', OWNERS, async ($, on) => {
-  const { clock } = boot(on, { DECK_PET: 'off', DECK_SESSIONS: 'none' })
-  await start($, clock)
-
-  expect(tracksOf(await mountDeck($))).not.toContain('sessions')
-})
-
-test('repaints the pet alone, by blit, while it moves', OWNERS, async ($, on) => {
+test('the sessions panel draws no pet: Clawd lives in clawd-mods', OWNERS, async ($, on) => {
   const { world, clock } = boot(on)
   await start($, clock)
-  await mountDeck($)
-  const drawn = world.redraws
+  const tree = await mountDeck($)
   await clock.advance(500)
 
-  expect(petBlits(world).length).toBeGreaterThan(3)
-  expect(petBlits(world).every(blit => blit.requestId === 'deck')).toBe(true)
-  expect(world.redraws - drawn).toBeLessThan(petBlits(world).length)
-})
-
-test('paints nothing while the pet keeps still', OWNERS, async ($, on) => {
-  const { world, clock } = boot(on, { DECK_PET: 'still' })
-  await start($, clock)
-  await mountDeck($)
-  await clock.advance(2000)
-
+  expect(tracksOf(tree)).toContain('sessions')
+  expect(find(tree, 'Raster')).toBeUndefined()
   expect(petBlits(world)).toEqual([])
 })
 
-test('stops repainting the pet once a blit is denied', OWNERS, async ($, on) => {
-  const { world, clock } = boot(on)
+test('leaves the sessions panel out when no other session is open', OWNERS, async ($, on) => {
+  const { clock } = boot(on, { DECK_SESSIONS: 'none' })
   await start($, clock)
-  await mountDeck($)
-  world.blitDeny = 'not mounted'
-  await clock.advance(500)
-  const tried = petBlits(world).length
-  await clock.advance(500)
 
-  expect(tried).toBe(1)
-  expect(petBlits(world)).toHaveLength(1)
+  expect(tracksOf(await mountDeck($))).not.toContain('sessions')
 })

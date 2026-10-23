@@ -3,7 +3,6 @@ import type { Engine, MockClock, Plugin } from 'claude-code/testing'
 import type { FsEntry, On, SessionUsage } from 'claude-code'
 
 import type { StatusBandPanel } from '../types'
-import { CREATURES, DIG_MS, HOPS_MS, petFrame } from '../hooks/pet'
 
 const MINUTE = 60_000
 const HOUR = 60 * MINUTE
@@ -246,7 +245,7 @@ const glyphsOf = (runs: Run[] = []) => runs.map(run => run.text).join('')
 
 const written = (part: unknown) => {
   if ((part as Drawn).type === 'Raster') {
-    return (part as Drawn).props?.key === 'pet' ? '[pet]' : '[spin]'
+    return '[spin]'
   }
 
   const runs = runsOf(part)
@@ -1014,8 +1013,7 @@ const BOARD = {
   },
 } as const
 
-// The lines of the pane the other sessions are listed in, without the empty
-// ones and without the pet under them.
+// The lines of the pane the other sessions are listed in, without the empty ones.
 const boardOf = async ($: Engine) => {
   const ui = await $.ui.mount({ ...BOARD, surface: 'terminal' })
   const tree = (await ui.drawn()) as Drawn
@@ -1023,7 +1021,7 @@ const boardOf = async ($: Engine) => {
 
   return (tree.children ?? [])
     .map(row => ((row as Drawn).children ?? []).map(written).join(''))
-    .filter(line => line.trim() !== '' && line !== '[pet]')
+    .filter(line => line.trim() !== '')
 }
 
 test('lists the sessions of both profiles in a pane of its own, but not itself', async ($, on) => {
@@ -1357,388 +1355,39 @@ test('keeps the lines of the pane two columns off its left edge, as the band sta
   expect(tree.props?.paddingLeft).toBe(2)
 })
 
-// One frame of a moving pet: thirty a second.
-const PET = 33
-
-const CRAB = CREATURES.crab
-
-// Where the pet stands before it has walked: the middle of its raster.
-const AT_HOME = { isHot: false, x: 4 }
-
-// A session in a state the pane has no motion for, so that only the pet may move.
-const STILL_PEER = () => peerIn('parked')
-
-// The pet the pane draws under its list, if it draws one: its row and its raster.
-const petIn = async ($: Engine, surface: 'terminal' | 'desktop' = 'terminal', bodyRows = 30) => {
-  const ui = await $.ui.mount({ ...BOARD, props: { ...BOARD.props, scroll: { offset: 0, bodyRows } }, surface })
-  const tree = (await ui.drawn()) as Drawn
-  await ui.unmount()
-  const row = (tree.children ?? []).at(-1) as Drawn | undefined
-  const raster = (row?.children ?? [])[0] as Drawn | undefined
-
-  return row !== undefined && raster?.type === 'Raster' && raster.props?.key === 'pet' ? { row, raster } : undefined
-}
-
-const petBlits = (world: { blits: { key: string; cells?: string }[] }) => world.blits.filter(blit => blit.key === 'pet')
+// ── No pet: since 2026-10-23 the one Clawd lives in clawd-mods ──────────────
 
 const work = async ($: Engine, clock: MockClock, turnId = 't1') => {
   await $.turn.start({ text: 'hi', turnId })
   await clock.settle()
 }
 
-test('draws the pet asleep under the list of the pane, a row apart, dug in long since', async ($, on) => {
+test('an old pet setting draws nothing either', { options: { pet: 'crab' } }, async ($, on) => {
   const { world, clock } = boot(on)
-  world.files = STILL_PEER()
+  world.files = peerIn('parked')
   await start($, clock)
-  const pet = await petIn($)
-
-  expect(pet?.row.props?.marginTop).toBe(1)
-  expect(pet?.raster.props).toMatchObject({
-    key: 'pet',
-    columns: 24,
-    rows: 8,
-    cells: petFrame(CRAB, 'asleep', DIG_MS, AT_HOME).cells,
-  })
-})
-
-test('draws the pet only where the pane has rows for the list, an empty row and the pet', async ($, on) => {
-  const { world, clock } = boot(on)
-  world.files = STILL_PEER()
-  await start($, clock)
-
-  // One session is two rows; the pet is eight and stands a row apart.
-  expect(await petIn($, 'terminal', 10)).toBeUndefined()
-  expect(await petIn($, 'terminal', 11)).toBeDefined()
-})
-
-test('gives the list every row of a pane that has no room for the pet', async ($, on) => {
-  const { world, clock } = boot(on)
-  world.files = {
-    ...peerIn('parked'),
-    [`${TEAM_SESSIONS}/2.json`]: presence('s2', 'second', 'parked', NOW),
-    [`${TEAM_SESSIONS}/3.json`]: presence('s3', 'third', 'parked', NOW),
-  }
-  await start($, clock)
-  const ui = await $.ui.mount({ ...BOARD, props: { ...BOARD.props, scroll: { offset: 0, bodyRows: 8 } }, surface: 'terminal' })
-  const tree = (await ui.drawn()) as Drawn
+  await work($, clock)
+  await clock.advance(33 * 5)
+  const ui = await $.ui.mount({ ...BOARD, surface: 'terminal' })
+  const tree = await ui.drawn()
   await ui.unmount()
 
-  // Three sessions are eight rows, and all three are named.
-  expect((tree.children ?? []).map(row => ((row as Drawn).children ?? []).map(written).join('')).join('|')).not.toContain('more')
-  expect(tree.children ?? []).toHaveLength(8)
+  expect(JSON.stringify(tree)).not.toContain('"pet"')
+  expect(world.blits.filter(blit => blit.key === 'pet')).toEqual([])
 })
 
-test('leaves the pet out when the person switched it off', { options: { pet: 'off' } }, async ($, on) => {
+test('draws no pet under the sessions, and paints none while Claude works', async ($, on) => {
   const { world, clock } = boot(on)
-  world.files = STILL_PEER()
+  world.files = peerIn('parked')
   await start($, clock)
   await work($, clock)
-  await clock.advance(PET * 5)
+  await clock.advance(33 * 5)
+  const ui = await $.ui.mount({ ...BOARD, surface: 'terminal' })
+  const tree = await ui.drawn()
+  await ui.unmount()
 
-  expect(await petIn($)).toBeUndefined()
-  expect(petBlits(world)).toEqual([])
-})
-
-test('draws the creature the person chose', { options: { pet: 'cat' } }, async ($, on) => {
-  const { world, clock } = boot(on)
-  world.files = STILL_PEER()
-  await start($, clock)
-
-  expect((await petIn($))?.raster.props?.cells).toBe(petFrame(CREATURES.cat, 'asleep', 0, AT_HOME).cells)
-})
-
-test('leaves the pet out on a surface that has no raster', async ($, on) => {
-  const { world, clock } = boot(on)
-  world.files = STILL_PEER()
-  await start($, clock)
-
-  expect(await petIn($, 'desktop')).toBeUndefined()
-})
-
-test('paints nothing of the pet while the session is idle', async ($, on) => {
-  const { world, clock } = boot(on)
-  world.files = STILL_PEER()
-  await start($, clock)
-  await petIn($)
-  await clock.advance(10_000)
-
-  expect(petBlits(world)).toEqual([])
-})
-
-test('walks the pet while Claude works, repainting it in place', async ($, on) => {
-  const { world, clock } = boot(on)
-  world.files = STILL_PEER()
-  await start($, clock)
-  await petIn($)
-  await work($, clock)
-  await clock.advance(PET)
-  await clock.advance(PET)
-
-  expect(petBlits(world)).toHaveLength(2)
-  expect(petBlits(world)[0]).toMatchObject({ requestId: 'sessions', key: 'pet', columns: 24, rows: 8 })
-  expect(petBlits(world).map(blit => blit.cells)).toEqual([
-    petFrame(CRAB, 'working', PET, AT_HOME).cells,
-    petFrame(CRAB, 'working', PET * 2, AT_HOME).cells,
-  ])
-})
-
-test('draws the pet in the middle of its walk when the pane is drawn while Claude works', async ($, on) => {
-  const { world, clock } = boot(on)
-  world.files = STILL_PEER()
-  await start($, clock)
-  await work($, clock)
-  await clock.advance(800)
-
-  expect((await petIn($))?.raster.props?.cells).toBe(petFrame(CRAB, 'working', 800, AT_HOME).cells)
-})
-
-test("keeps the pet's walk going when a subagent's turn starts", async ($, on) => {
-  const { world, clock } = boot(on)
-  world.files = STILL_PEER()
-  await start($, clock)
-  await petIn($)
-  await work($, clock)
-  await clock.advance(PET * 24)
-  await work($, clock, 't2')
-  await clock.advance(PET)
-
-  expect(petBlits(world).at(-1)?.cells).toBe(petFrame(CRAB, 'working', PET * 25, AT_HOME).cells)
-})
-
-test('hops when the turn ends, digs in where it stopped, and is painted no more once it sleeps', async ($, on) => {
-  const { world, clock } = boot(on)
-  world.files = STILL_PEER()
-  await start($, clock)
-  await petIn($)
-  await work($, clock)
-  await clock.advance(PET * 12)
-  await $.turn.complete({ ...TURN, durationMs: 396 })
-  await clock.settle()
-  await clock.advance(PET)
-  // Twelve frames of walking are two steps, which took it two pixels on.
-  const there = { isHot: false, x: 6 }
-
-  expect(petBlits(world).at(-1)?.cells).toBe(petFrame(CRAB, 'done', PET, there).cells)
-
-  await clock.advance(HOPS_MS)
-
-  expect(petBlits(world).at(-1)?.cells).toBe(petFrame(CRAB, 'asleep', 0, there).cells)
-
-  await clock.advance(DIG_MS)
-
-  expect(petBlits(world).at(-1)?.cells).toBe(petFrame(CRAB, 'asleep', DIG_MS, there).cells)
-
-  const painted = petBlits(world).length
-  await clock.advance(10_000)
-
-  expect(petBlits(world)).toHaveLength(painted)
-})
-
-test('starts the next walk from where the pet fell asleep', async ($, on) => {
-  const { world, clock } = boot(on)
-  world.files = STILL_PEER()
-  await start($, clock)
-  await petIn($)
-  await work($, clock)
-  await clock.advance(PET * 12)
-  await $.turn.complete({ ...TURN, durationMs: 396 })
-  await clock.settle()
-  await clock.advance(HOPS_MS + PET)
-  await work($, clock, 't2')
-  await clock.advance(PET)
-
-  expect(petBlits(world).at(-1)?.cells).toBe(petFrame(CRAB, 'working', PET, { isHot: false, x: 6 }).cells)
-})
-
-test("does not hop when a subagent's turn ends", async ($, on) => {
-  const { world, clock } = boot(on)
-  world.files = STILL_PEER()
-  await start($, clock)
-  await petIn($)
-  await work($, clock)
-  await clock.advance(PET * 2)
-  await $.turn.complete({ ...TURN, turnId: 't2', agentId: 'a1', durationMs: 100 })
-  await clock.settle()
-  await clock.advance(PET)
-
-  expect(petBlits(world).at(-1)?.cells).toBe(petFrame(CRAB, 'working', PET * 3, AT_HOME).cells)
-})
-
-test('stands the pet awake and sweating when the five-hour limit is nearly spent', async ($, on) => {
-  const { world, clock } = boot(on)
-  world.files = STILL_PEER()
-  world.usage = {
-    ...world.usage,
-    rateLimits: world.usage.rateLimits.map(limit => (limit.kind === 'five_hour' ? { ...limit, percentUsed: 91 } : limit)),
-  }
-  await start($, clock)
-
-  expect((await petIn($))?.raster.props?.cells).toBe(petFrame(CRAB, 'asleep', 0, { isHot: true, x: 4 }).cells)
-})
-
-test('stops walking the pet once its pane is gone, and walks it again when the pane is back', async ($, on) => {
-  const { world, clock } = boot(on)
-  world.files = STILL_PEER()
-  await start($, clock)
-  await petIn($)
-  world.blitDeny = 'no Raster of its own is mounted under that key'
-  await work($, clock)
-  await clock.advance(PET * 5)
-
-  // The first repaint is refused, so the pet is left alone until it is drawn again.
-  expect(petBlits(world)).toHaveLength(1)
-
-  world.blitDeny = ''
-  await petIn($)
-  await clock.advance(PET)
-
-  expect(petBlits(world)).toHaveLength(2)
-})
-
-test(
-  'shows the pet awake but still while Claude works when the animation is switched off',
-  { options: { animate: false } },
-  async ($, on) => {
-    const { world, clock } = boot(on)
-    world.files = STILL_PEER()
-    await start($, clock)
-    await petIn($)
-    const drawn = world.redraws
-    await work($, clock)
-    await clock.advance(PET * 10)
-
-    // No frame is painted: the pane is drawn again once, with the pet awake.
-    expect(petBlits(world)).toEqual([])
-    expect(world.redraws).toBe(drawn + 1)
-    expect((await petIn($))?.raster.props?.cells).toBe(petFrame(CRAB, 'working', 0, AT_HOME).cells)
-
-    await $.turn.complete({ ...TURN, durationMs: 800 })
-    await clock.settle()
-
-    // Without animation there is no digging to show: it lies dug in at once.
-    expect((await petIn($))?.raster.props?.cells).toBe(petFrame(CRAB, 'asleep', DIG_MS, AT_HOME).cells)
-  },
-)
-
-// Starts a Bash call that waits for the person's answer, and opens its prompt.
-const askPerson = async ($: Engine, clock: MockClock, world: { held: Promise<void> }) => {
-  let answer = () => {}
-  world.held = new Promise<void>(done => {
-    answer = done
-  })
-  const call = $.tool.call({ tool: 'Bash', command: 'rm -r build' })
-  await clock.settle()
-  await $.classic.PermissionRequest({ tool_name: 'Bash', tool_input: { command: 'rm -r build' } })
-  await clock.settle()
-
-  return async () => {
-    answer()
-    await call
-    await clock.settle()
-  }
-}
-
-// Six frames of walking are a step, which took it a pixel on from home.
-const A_STEP_ON = { isHot: false, x: 5 }
-
-test('waves the pet under a question mark while a prompt waits for the person, and walks on once it is answered', async ($, on) => {
-  const { world, clock } = boot(on)
-  world.files = STILL_PEER()
-  await start($, clock)
-  await petIn($)
-  await work($, clock)
-  await clock.advance(PET * 6)
-  const answer = await askPerson($, clock, world)
-  await clock.advance(PET)
-
-  expect(petBlits(world).at(-1)?.cells).toBe(petFrame(CRAB, 'waiting', PET, A_STEP_ON).cells)
-
-  await clock.advance(PET * 12)
-
-  // It goes on waving while nobody answers.
-  expect(petBlits(world).at(-1)?.cells).toBe(petFrame(CRAB, 'waiting', PET * 13, A_STEP_ON).cells)
-
-  await answer()
-  await clock.advance(PET)
-
-  expect(petBlits(world).at(-1)?.cells).toBe(petFrame(CRAB, 'working', PET, A_STEP_ON).cells)
-})
-
-test('keeps the pet waiting when some other call ends before the prompt is answered', async ($, on) => {
-  const { world, clock } = boot(on)
-  world.files = STILL_PEER()
-  await start($, clock)
-  await petIn($)
-  await work($, clock)
-  await clock.advance(PET * 6)
-  await askPerson($, clock, world)
-  await $.tool.call({ tool: 'Read', file_path: 'notes.md' })
-  await clock.settle()
-  await clock.advance(PET)
-
-  expect(petBlits(world).at(-1)?.cells).toBe(petFrame(CRAB, 'waiting', PET, A_STEP_ON).cells)
-})
-
-test("keeps the pet waiting when a subagent's turn starts", async ($, on) => {
-  const { world, clock } = boot(on)
-  world.files = STILL_PEER()
-  await start($, clock)
-  await petIn($)
-  await work($, clock)
-  await clock.advance(PET * 6)
-  await askPerson($, clock, world)
-  await work($, clock, 't2')
-  await clock.advance(PET)
-
-  expect(petBlits(world).at(-1)?.cells).toBe(petFrame(CRAB, 'waiting', PET, A_STEP_ON).cells)
-})
-
-test('hops when the turn ends while a prompt waits, as when the person turns it down', async ($, on) => {
-  const { world, clock } = boot(on)
-  world.files = STILL_PEER()
-  await start($, clock)
-  await petIn($)
-  await work($, clock)
-  await clock.advance(PET * 6)
-  await askPerson($, clock, world)
-  await $.turn.complete({ ...TURN, durationMs: 400 })
-  await clock.settle()
-  await clock.advance(PET)
-
-  expect(petBlits(world).at(-1)?.cells).toBe(petFrame(CRAB, 'done', PET, A_STEP_ON).cells)
-})
-
-test('does not wait when a hook beneath answered the permission request, so no prompt opened', async ($, on) => {
-  const { world, clock } = boot(on)
-  world.files = STILL_PEER()
-  world.permission = { decision: { behavior: 'allow' } }
-  await start($, clock)
-  await petIn($)
-  await work($, clock)
-  await clock.advance(PET * 6)
-  await askPerson($, clock, world)
-  await clock.advance(PET)
-
-  expect(petBlits(world).at(-1)?.cells).toBe(petFrame(CRAB, 'working', PET * 7, AT_HOME).cells)
-})
-
-test('lays the pet on its back once the five-hour limit is spent, and paints it no more', async ($, on) => {
-  const { world, clock } = boot(on)
-  world.files = STILL_PEER()
-  world.usage = {
-    ...world.usage,
-    rateLimits: world.usage.rateLimits.map(limit => (limit.kind === 'five_hour' ? { ...limit, percentUsed: 100 } : limit)),
-  }
-  await start($, clock)
-  const spent = { isHot: true, isSpent: true, x: 4 }
-
-  expect((await petIn($))?.raster.props?.cells).toBe(petFrame(CRAB, 'asleep', 0, spent).cells)
-
-  await work($, clock)
-  await clock.advance(PET * 10)
-
-  expect(petBlits(world)).toEqual([])
-  expect((await petIn($))?.raster.props?.cells).toBe(petFrame(CRAB, 'working', 0, spent).cells)
+  expect(JSON.stringify(tree)).not.toContain('"pet"')
+  expect(world.blits.filter(blit => blit.key === 'pet')).toEqual([])
 })
 
 // ── The Status tab ──────────────────────────────────────────────────────────
@@ -1988,7 +1637,16 @@ const DECK: Plugin = {
     on('command.run', { command: 'limits' }, async ($, e) => ({
       text: JSON.stringify(await $.statusBand.panel({ id: 'limits', columns: Number(e.args) })),
     }))
-    on('command.run', { command: 'deck-pet' }, async $ => ({ text: JSON.stringify(await $.statusBand.pet()) }))
+    // What status-band lends besides its panels and the host: nothing, since the pet went.
+    on('command.run', { command: 'deck-pet' }, async $ => {
+      try {
+        await ($.statusBand as unknown as { pet: () => Promise<unknown> }).pet()
+
+        return { text: 'lent' }
+      } catch {
+        return { text: 'none' }
+      }
+    })
     on('command.run', { command: 'deck-sessions' }, async ($, e) => ({
       text: JSON.stringify(await $.statusBand.panel({ id: 'sessions', columns: Number(e.args), rows: 8 })),
     }))
@@ -2150,26 +1808,9 @@ test('/sessions says where the sessions are while a host has them', { plugins: [
   expect(world.panes).not.toContain('sessions')
 })
 
-const lentPet = async ($: Engine) => JSON.parse((await ask($, 'deck-pet', '')).text) as { columns: number; rows: number; cells: string; isStill: boolean } | null
-
-test("lends the pet's frame, 24 by 8, asleep and still at the start", { plugins: [DECK] }, async ($, on) => {
+test('lends the Deck no pet: Clawd lives in clawd-mods', { plugins: [DECK] }, async ($, on) => {
   const { clock } = boot(on)
   await start($, clock)
 
-  expect(await lentPet($)).toEqual({ columns: 24, rows: 8, cells: petFrame(CRAB, 'asleep', DIG_MS, AT_HOME).cells, isStill: true })
-})
-
-test('a turn that starts wakes the pet: its frame is no longer still', { plugins: [DECK] }, async ($, on) => {
-  const { clock } = boot(on)
-  await start($, clock)
-  await work($, clock)
-
-  expect((await lentPet($))?.isStill).toBe(false)
-})
-
-test('lends no pet while the pet option is off', { plugins: [DECK], options: { pet: 'off' } }, async ($, on) => {
-  const { clock } = boot(on)
-  await start($, clock)
-
-  expect(await lentPet($)).toBeNull()
+  expect((await ask($, 'deck-pet', '')).text).toBe('none')
 })

@@ -59,25 +59,6 @@ const SYNC_MS = 250
 
 let ticking: Timer | null = null
 
-// The pet (status-band's Clawd) stands under the sessions, in a raster of the
-// Deck's own: only that raster is repainted, by blit, never the whole pane, as
-// Flightdeck redraws only the region that moves. A timer started with the
-// session asks status-band for the pet's frame while one is drawn; a still pet
-// is looked at again only now and then. A refused blit (the raster is gone)
-// stops it until the next drawing.
-const PET_TICK_MS = 50
-
-const PET_REST_MS = 500
-
-// The drawing the raster stands in, its cells now, when to look at it next.
-let petAt: string | null = null
-
-let petCells = ''
-
-let petLookAt = 0
-
-let isPetStepping = false
-
 // Tells the mods the Deck hosts them, and whether it is in the dock now. One
 // that cannot be told (it reloads) is told again at the next change.
 async function hostAll($: EngineInterface, isDocked: boolean) {
@@ -124,50 +105,6 @@ function keepTime($: EngineInterface, panels: readonly DeckPanel[]) {
   } else {
     ticking?.cancel()
     ticking = null
-  }
-}
-
-async function stepPet($: EngineInterface) {
-  if (petAt === null || isPetStepping) {
-    return
-  }
-
-  const now = await $.clock.now()
-
-  if (now < petLookAt) {
-    return
-  }
-
-  isPetStepping = true
-
-  try {
-    const frame = await $.statusBand.pet()
-
-    if (frame === null) {
-      petAt = null
-
-      return
-    }
-
-    petLookAt = frame.isStill ? now + PET_REST_MS : 0
-
-    if (frame.cells === petCells) {
-      return
-    }
-
-    const painted = await $.ui.blit({ requestId: petAt, key: 'pet', columns: frame.columns, rows: frame.rows, cells: frame.cells })
-
-    if (painted.deny !== undefined) {
-      petAt = null
-
-      return
-    }
-
-    petCells = frame.cells
-  } catch {
-    petAt = null
-  } finally {
-    isPetStepping = false
   }
 }
 
@@ -228,7 +165,6 @@ export const register: Register = (on, options) => {
         void hostAll($, seen)
       }
     })
-    $.clock.every(PET_TICK_MS, () => void stepPet($))
 
     if (isOpenAtStart) {
       $.clock.after(OPEN_AFTER_MS, () => void $.ui.open(PANE))
@@ -297,7 +233,6 @@ export const register: Register = (on, options) => {
 
     // Inline above the prompt, where no side pane is: the mini summary, a few rows.
     if (e.props.placement !== 'dock') {
-      petAt = null
       const lent = await panelsOf($, panels, Math.max(NARROWEST, e.props.bodyColumns))
 
       return (
@@ -312,23 +247,12 @@ export const register: Register = (on, options) => {
     const width = Math.max(NARROWEST, e.props.bodyColumns - 2 * GUTTER)
     const lent = await panelsOf($, panels, width)
     const order = orderOf(panels, await read($, top))
-    // The pet, where the surface draws rasters and the sessions are shown.
-    const PetRaster = e.surface === 'terminal' ? $.ui.resolve(e).Raster : undefined
     const Client = e.surface === 'terminal' && isMotion ? $.ui.resolve(e).Client : undefined
-    const pet = PetRaster !== undefined && panels.includes('sessions') ? await $.statusBand.pet().catch(() => null) : null
-    petAt = pet === null ? null : e.requestId
-
-    if (pet !== null) {
-      petCells = pet.cells
-      petLookAt = pet.isStill ? (await $.clock.now()) + PET_REST_MS : 0
-    }
-
     // The trains run while any panel moves on its own: Claude is working.
     const isMoving = lent.some(panel => panel.isLive === true)
     const plan = lent.find(panel => panel.id === 'plan')
     const model = lent.find(panel => panel.id === 'limits')?.label ?? []
-    const isShown = (panel: DeckPanel) =>
-      panel.rows.length > 0 || (panel.stops?.length ?? 0) > 0 || (panel.id === 'sessions' && pet !== null)
+    const isShown = (panel: DeckPanel) => panel.rows.length > 0 || (panel.stops?.length ?? 0) > 0
     const shown = order.flatMap(id => lent.filter(panel => panel.id === id && isShown(panel)))
     keepTime($, lent)
 
@@ -403,11 +327,6 @@ export const register: Register = (on, options) => {
           <Box flexDirection="column" marginTop={1}>
             {trackFor(panel)}
             {bodyOf(panel)}
-            {panel.id === 'sessions' && pet !== null && PetRaster !== undefined ? (
-              <Box marginTop={panel.rows.length > 0 ? 1 : 0}>
-                <PetRaster key="pet" columns={pet.columns} rows={pet.rows} cells={pet.cells} />
-              </Box>
-            ) : null}
           </Box>
         ))}
       </Box>

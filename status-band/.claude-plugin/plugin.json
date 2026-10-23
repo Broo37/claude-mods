@@ -39,19 +39,6 @@
         "above",
         "below"
       ]
-    },
-    "pet": {
-      "type": "string",
-      "title": "Pet",
-      "description": "The creature under the list of sessions: it sleeps while idle, walks while Claude works, hops when a turn ends and stands under a ? while a prompt waits for you; the crab is Clawd, who digs into sand to sleep and lies on his back once the 5H limit is spent",
-      "default": "crab",
-      "options": [
-        "crab",
-        "cat",
-        "ghost",
-        "smiley",
-        "off"
-      ]
     }
   }
 }

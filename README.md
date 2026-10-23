@@ -8,7 +8,7 @@ Mods for [Claude Code](https://claude.com/claude-code): plugins of function hook
 | [`deck`](#️-deck) | The plan, your limits, the turn and your sessions in one tab, drawn as a train line |
 | [`clean-view`](#-clean-view) | Hides Claude's tool calls and shows its plan as a checklist |
 | [`fold-view`](#-fold-view) | Folds every tool call to one line a click opens |
-| [`status-band`](#-status-band) | Model, git, cost and your usage limits as bars, plus a pet |
+| [`status-band`](#-status-band) | Model, git, cost and your usage limits as bars |
 | [`transcript-makeover`](#-transcript-makeover) | A check or a cross and a time on every tool row, a receipt after every turn |
 | [`tool-waterfall`](#-tool-waterfall) | A chart of the turn's tool calls over time |
 | [`risky-hold`](#-risky-hold) | Asks you before a destructive shell command runs |
@@ -58,9 +58,9 @@ Each card covers one mod: what it does, what to type and what you can set. Setti
   - **plan:** the job is the line and its steps are stations down it: `✓` passed, `◉` the one at work with its meter, `○` ahead. A held job shows at the station: `?` waiting on you (the same mark as in the header and the sessions), `!` failing, `■` stopped.
   - **limits:** 5H, 7D, Codex and context as thin bars in zones: a heavy line for what you used, a light line up to where its window's pace stands, dots beyond. Use a window faster than it passes and the part of the line past the pace turns to your theme's warning color. Then your folder and git state.
   - **timeline:** this turn's tool calls as thin bars along dotted lanes, over time, from the moment the turn starts (`no tool calls yet`), or the last turn's.
-  - **sessions:** your other Claude Code sessions, a row each: `?` needs you, `○` waiting, `◌` shell, `●` working. Under them stands the pet, Clawd, moving as he does in the Sessions pane. Only his picture is repainted, never the whole pane.
+  - **sessions:** your other Claude Code sessions, a row each: `?` needs you, `○` waiting, `◌` shell, `●` working.
 
-  While Claude works, a train runs down the tracks one after another, and down the line beside the station at work. At rest the tracks are still. The trains are drawn on their own clock, so they never redraw the rest of the pane. Every color is a key of your theme, so the Deck reads in light and dark themes alike. A section with nothing to show takes no room: no timeline before the first turn, and no sessions while no other session is open and the pet is off.
+  While Claude works, a train runs down the tracks one after another, and down the line beside the station at work. At rest the tracks are still. The trains are drawn on their own clock, so they never redraw the rest of the pane. Every color is a key of your theme, so the Deck reads in light and dark themes alike. A section with nothing to show takes no room: no timeline before the first turn, and no sessions while no other session is open.
 - **Outside fullscreen**, where there is no side pane, the Deck stands above the prompt as a summary of four rows at most: the header, the step at work, `5H 66% · 7D 8% · ctx 6%`, and the turn or your sessions.
 - **Type:**
   - `/deck` closes it, or brings it to the front.
@@ -73,7 +73,6 @@ Each card covers one mod: what it does, what to type and what you can set. Setti
 - **Works with:**
   - It needs `clean-view`, `status-band` and `tool-waterfall`, which lend it their panels.
   - Closed, status-band's band comes back above the prompt, so nothing goes missing.
-  - The pet is status-band's: `pet` in its settings picks the creature, or `off`.
 
 ### 🧹 `clean-view`
 
@@ -91,9 +90,8 @@ Each card covers one mod: what it does, what to type and what you can set. Setti
 ### 📊 `status-band`
 
 - **What:** a `Status` tab in the side pane, with your 5H, 7D, Codex and context bars standing side by side, plus model, git, cost and reset times. Where the tab can't show, it becomes a band by the prompt. With `deck` loaded, the limits are the Deck's limits panel and the `Status` tab stays closed.
-- **Type:** `/band` brings the Status tab to the front. `/sessions` shows your other Claude Code sessions in a pane, with a pet under the list. With `deck` loaded, the sessions and the pet are the Deck's sessions panel, and the Sessions pane stays closed.
-- **The pet:** it sleeps while you're idle, walks while Claude works, hops when a turn ends, and stands under a `?` while Claude waits for you. The crab is Clawd.
-- **Set:** `tab` (on), `size` (`xsmall` to `xlarge`), `animate` (on), `position` (`above` or `below` the prompt), `pet` (`crab`, `cat`, `ghost`, `smiley` or `off`).
+- **Type:** `/band` brings the Status tab to the front. `/sessions` shows your other Claude Code sessions in a pane. With `deck` loaded, the sessions are the Deck's sessions panel, and the Sessions pane stays closed.
+- **Set:** `tab` (on), `size` (`xsmall` to `xlarge`), `animate` (on), `position` (`above` or `below` the prompt).
 
 ### 🧾 `transcript-makeover`
 
