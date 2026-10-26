@@ -1,0 +1,29 @@
+{
+  "name": "clawd-mods",
+  "version": "0.4.0",
+  "description": "Clawd the crab above the prompt under a live sky, living by your limits; /clawd has PC tips, Claude status, reminders, weather, limits with a 7-day chart, sessions and top projects. Grown from clawd-usage-winwidget.",
+  "author": {
+    "name": "Broo37"
+  },
+  "types": "./types/index.d.ts",
+  "userConfig": {
+    "band": {
+      "type": "boolean",
+      "title": "Clawd band above the prompt",
+      "description": "Show Clawd above the prompt. Off keeps /clawd. Also: /clawd band on|off",
+      "default": true
+    },
+    "sky": {
+      "type": "boolean",
+      "title": "Sky above Clawd",
+      "description": "The row above Clawd: the sun by the hour, the moon in its phase and stars at night. Off leaves it empty.",
+      "default": true
+    },
+    "city": {
+      "type": "string",
+      "title": "City for Clawd's sky",
+      "description": "Where the weather and the sun are read for, such as Bandung. Empty: found from your internet address.",
+      "default": ""
+    }
+  }
+}

@@ -1,11 +1,12 @@
 # claude-mods
 
-Mods for [Claude Code](https://claude.com/claude-code): plugins of function hooks that change how a session looks and behaves. There are eleven. Install the ones you want, then find each one's card in the [cheat sheet](#cheat-sheet). Each installs on its own except two: `confetti` needs `clean-view`, and `deck` needs `clean-view`, `status-band` and `tool-waterfall`.
+Mods for [Claude Code](https://claude.com/claude-code): plugins of function hooks that change how a session looks and behaves. There are twelve. Install the ones you want, then find each one's card in the [cheat sheet](#cheat-sheet). Each installs on its own except two: `confetti` needs `clean-view`, and `deck` needs `clean-view`, `status-band` and `tool-waterfall`.
 
 | Mod | In one line |
 | --- | --- |
 | [`confetti`](#-confetti) | A burst of pixel confetti when a job ends as All done |
 | [`deck`](#️-deck) | The plan, your limits, the turn and your sessions in one tab, drawn as a train line |
+| [`clawd-mods`](#-clawd-mods) | Clawd the crab above the prompt under your real sky, living by your limits |
 | [`clean-view`](#-clean-view) | Hides Claude's tool calls and shows its plan as a checklist |
 | [`fold-view`](#-fold-view) | Folds every tool call to one line a click opens |
 | [`status-band`](#-status-band) | Model, git, cost and your usage limits as bars |
@@ -38,6 +39,7 @@ To load several from folders, list them in `CLAUDE_CODE_PLUGIN_DIRS` (under `env
 
 - `confetti` comes first, even before `clean-view`: its burst goes on top of the checklist Clean View draws above the prompt. Listed after it, Clean View would take the burst for another mod's band and make a tab of it.
 - `deck` comes right after `confetti`, before `clean-view`. A mod is always loaded above the mods it needs, so listed after `clean-view` it would pull `clean-view` down below `fold-view`, and folded rows would show while Clean View is on.
+- `clawd-mods` comes after `deck`, before `clean-view`: Clawd stands on top of the band. Listed after it, Clean View would take his band for another mod's and put him in its Status tab.
 - `clean-view` comes next: it wraps the band `status-band` draws and the pane `tool-waterfall` draws, and its hidden rows have to win over the badges of `transcript-makeover`.
 - `fold-view` comes right after it: it folds the rows Clean View lets through while off, and its folded lines have to win over the badges of `transcript-makeover` too.
 - `status-band`, `transcript-makeover` and `tool-waterfall` come before `risky-hold`: a command it refuses never reaches a mod listed after it, so the mods that count and time calls would miss it.
@@ -73,6 +75,17 @@ Each card covers one mod: what it does, what to type and what you can set. Setti
 - **Works with:**
   - It needs `clean-view`, `status-band` and `tool-waterfall`, which lend it their panels.
   - Closed, status-band's band comes back above the prompt, so nothing goes missing.
+
+### 🦀 `clawd-mods`
+
+- **What:** Clawd, the crab from the welcome screen, lives in a band above the prompt under your real sky: the sun by the hour, the moon in its phase and stars at night, drifting clouds, rain, snow and storms from the weather where you are. He runs while Claude works, hops with a `?` while a session needs you, sweats near your 5-hour limit and lies belly-up at 100%. A bell rings over his head for a reminder, and a `!` stands there during a Claude incident.
+- **Type:**
+  - `/clawd` opens a pane: PC tips, Claude status, reminders, weather, your limits with a 7-day chart, your sessions and this week's top projects.
+  - `/clawd play <name>` plays one of his animations, `/clawd demo` all of them, `/clawd auto` lets him live again. `/clawd band off` hides him, `/clawd band on` brings him back.
+  - `/remind <when> <what>`: `20m`, `18:30`, `tomorrow 10`, `mon 9:00`; start with `daily`, `weekly`, `monthly` or `yearly` to repeat. Or just ask Claude to remind you.
+- **Click:** Clawd, for one of Claude Code's own animations and a heart. In the pane, a tip's **Fix it** hands it to Claude, who asks before each command.
+- **Set:** `band` (on), `sky` (on), `city` (empty: found from your internet address).
+- **Good to know:** the PC tips and the top projects are Windows only. Reminders ring only while a session with the mod is open. Your limits come from `claude -p /usage`, which spends no tokens. Ported from a Windows widget, see [Credits](#credits); [its README](clawd-mods/README.md) has the rest.
 
 ### 🧹 `clean-view`
 
@@ -206,4 +219,5 @@ The scripts under `status-band/tools` and `rainbow-prompt/tools` start a real se
 ## Credits
 
 - The palette, gradients and wording of `status-band` are ported from [Awesome Statusline](https://github.com/AwesomeJun/CC-statusline) by AwesomeJun (MIT, see `status-band/LICENSE-awesome-statusline.txt`).
+- Clawd's glyphs, eye shapes, animations and clouds, the `/usage` parsing and where the PC checks look in `clawd-mods` are ported from [clawd-usage-winwidget](https://github.com/Enhed/clawd-usage-winwidget) by Venger Sergey (MIT, see `clawd-mods/LICENSE`).
 - The frames of the `smiley` animation of `spinner` are carried over from a spinner set up in [tweakcc](https://github.com/Piebald-AI/tweakcc).

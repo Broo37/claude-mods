@@ -14,6 +14,11 @@
       "description": "One tab of the side pane for our mods: the plan, your limits, the turn and your sessions as boxed panels, in place of the Steps, Status, Waterfall and Sessions tabs"
     },
     {
+      "name": "clawd-mods",
+      "source": "./clawd-mods",
+      "description": "Clawd the crab above the prompt under a live sky, living by your limits; /clawd has PC tips, Claude status, reminders, weather, limits with a 7-day chart, sessions and top projects; /remind sets reminders"
+    },
+    {
       "name": "clean-view",
       "source": "./clean-view",
       "description": "Hides tool calls, diffs and command output while Claude works, and shows the plan as a checklist above the prompt"
