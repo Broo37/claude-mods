@@ -1,0 +1,6 @@
+{
+  "name": "peer-box",
+  "version": "0.1.0",
+  "description": "Draws a light blue square box around each message another Claude session sends into this one",
+  "author": { "name": "Broo37" }
+}

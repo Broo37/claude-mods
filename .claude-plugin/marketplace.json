@@ -54,6 +54,11 @@
       "description": "Shows when each prompt you sent was sent, at the right of its row in the transcript"
     },
     {
+      "name": "peer-box",
+      "source": "./peer-box",
+      "description": "Draws a light blue square box around each message another Claude session sends into this one"
+    },
+    {
       "name": "spinner",
       "source": "./spinner",
       "description": "Draws the line that moves while Claude works as an equalizer, a rainbow wave, a comet, a game of pong or a face eating a bar of blocks, with wording of your own"

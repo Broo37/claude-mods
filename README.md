@@ -1,6 +1,6 @@
 # claude-mods
 
-Mods for [Claude Code](https://claude.com/claude-code): plugins of function hooks that change how a session looks and behaves. There are twelve. Install the ones you want, then find each one's card in the [cheat sheet](#cheat-sheet). Each installs on its own except two: `confetti` needs `clean-view`, and `deck` needs `clean-view`, `status-band` and `tool-waterfall`.
+Mods for [Claude Code](https://claude.com/claude-code): plugins of function hooks that change how a session looks and behaves. There are thirteen. Install the ones you want, then find each one's card in the [cheat sheet](#cheat-sheet). Each installs on its own except two: `confetti` needs `clean-view`, and `deck` needs `clean-view`, `status-band` and `tool-waterfall`.
 
 | Mod | In one line |
 | --- | --- |
@@ -14,6 +14,7 @@ Mods for [Claude Code](https://claude.com/claude-code): plugins of function hook
 | [`tool-waterfall`](#-tool-waterfall) | A chart of the turn's tool calls over time |
 | [`risky-hold`](#-risky-hold) | Asks you before a destructive shell command runs |
 | [`message-times`](#-message-times) | When you sent each prompt |
+| [`peer-box`](#-peer-box) | A light blue box around messages from your other Claude sessions |
 | [`spinner`](#-spinner) | The working line as an animation, with your own wording |
 | [`rainbow-prompt`](#-rainbow-prompt) | Colors the prompt as you type, and secrets in red |
 
@@ -126,6 +127,12 @@ Each card covers one mod: what it does, what to type and what you can set. Setti
 
 - **What:** the time you sent each prompt, at the right of its row: `14:05`, or `6 Oct 23:59` for a prompt from another day.
 - **Type:** nothing, it works by itself.
+
+### 📨 `peer-box`
+
+- **What:** a light blue (`#8BE9FD`, Dracula's cyan) square box around each message another Claude session sends into this one, so a "please don't publish" from a peer stands out from your own prompts.
+- **Type:** nothing, it works by itself. Your own prompts, notifications and Claude's replies are left as they are drawn.
+- **Works with:** other mods that draw the row, such as `prismantis`: it frames whatever they draw.
 
 ### 🌀 `spinner`
 
