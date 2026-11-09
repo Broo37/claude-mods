@@ -56,7 +56,7 @@
     {
       "name": "peer-box",
       "source": "./peer-box",
-      "description": "Draws a light blue square box around each message another Claude session sends into this one"
+      "description": "Draws a light blue square box on a dark blue fill around each message another Claude session sends into this one, and a quiet square box around each tool call row"
     },
     {
       "name": "spinner",

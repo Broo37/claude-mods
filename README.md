@@ -14,7 +14,7 @@ Mods for [Claude Code](https://claude.com/claude-code): plugins of function hook
 | [`tool-waterfall`](#-tool-waterfall) | A chart of the turn's tool calls over time |
 | [`risky-hold`](#-risky-hold) | Asks you before a destructive shell command runs |
 | [`message-times`](#-message-times) | When you sent each prompt |
-| [`peer-box`](#-peer-box) | A light blue box around messages from your other Claude sessions |
+| [`peer-box`](#-peer-box) | A light blue box around messages from your other Claude sessions, a quiet one around tool calls |
 | [`spinner`](#-spinner) | The working line as an animation, with your own wording |
 | [`rainbow-prompt`](#-rainbow-prompt) | Colors the prompt as you type, and secrets in red |
 
@@ -130,8 +130,9 @@ Each card covers one mod: what it does, what to type and what you can set. Setti
 
 ### 📨 `peer-box`
 
-- **What:** a light blue (`#8BE9FD`, Dracula's cyan) square box around each message another Claude session sends into this one, so a "please don't publish" from a peer stands out from your own prompts.
+- **What:** a light blue (`#8BE9FD`, Dracula's cyan) square box on a dark blue fill (`#1E3A47`) around each message another Claude session sends into this one, so a "please don't publish" from a peer stands out from your own prompts. Each tool call row, and each folded group line (`Read 3 files`), gets a quiet grey-blue (`#6272A4`) square box too.
 - **Type:** nothing, it works by itself. Your own prompts, notifications and Claude's replies are left as they are drawn.
+- **Good to know:** a tool call's output draws below its box, not inside it: Claude Code draws the row and its result as two pieces. An unfolded group frames each of its rows, never the group as well.
 - **Works with:** other mods that draw the row, such as `prismantis`: it frames whatever they draw.
 
 ### 🌀 `spinner`
