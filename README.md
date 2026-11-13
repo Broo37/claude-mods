@@ -130,9 +130,9 @@ Each card covers one mod: what it does, what to type and what you can set. Setti
 
 ### 📨 `peer-box`
 
-- **What:** a light blue (`#8BE9FD`, Dracula's cyan) square box on a dark blue fill (`#1E3A47`) around each message another Claude session sends into this one, so a "please don't publish" from a peer stands out from your own prompts. Each tool call row, and each folded group line (`Read 3 files`), gets a quiet grey-blue (`#6272A4`) square box too.
+- **What:** a light blue (`#8BE9FD`, Dracula's cyan) square box on a dark blue fill (`#1E3A47`) around each message another Claude session sends into this one, so a "please don't publish" from a peer stands out from your own prompts. Each tool call row, and each folded group line (`Read 3 files`), gets a square box too: quiet grey-blue (`#6272A4`) once done, yellow (`#F1FA8C`) while it runs, red (`#FF5555`) when it failed or you stopped it.
 - **Type:** nothing, it works by itself. Your own prompts, notifications and Claude's replies are left as they are drawn.
-- **Good to know:** a tool call's output draws below its box, not inside it: Claude Code draws the row and its result as two pieces. An unfolded group frames each of its rows, never the group as well.
+- **Good to know:** a tool call's output draws below its box, not inside it: Claude Code draws the row and its result as two pieces. An unfolded group frames each of its rows, never the group as well. Calls Claude Code shows as nothing (`ToolSearch`, `TodoWrite`, the task tools) get no box, so no empty frame is left in the chat. A row that opens with a blank line has it moved above the box, so the text sits right under the top border.
 - **Works with:** other mods that draw the row, such as `prismantis`: it frames whatever they draw.
 
 ### 🌀 `spinner`

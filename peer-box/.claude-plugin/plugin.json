@@ -1,6 +1,6 @@
 {
   "name": "peer-box",
-  "version": "0.1.0",
-  "description": "Draws a light blue square box on a dark blue fill around each message another Claude session sends into this one, and a quiet square box around each tool call row",
+  "version": "0.2.0",
+  "description": "Draws a light blue square box on a dark blue fill around each message another Claude session sends into this one, and a square box around each tool call row whose border turns yellow while it runs and red when it fails",
   "author": { "name": "Broo37" }
 }
