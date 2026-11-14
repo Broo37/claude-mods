@@ -133,7 +133,8 @@ Each card covers one mod: what it does, what to type and what you can set. Setti
 - **What:** a light blue (`#8BE9FD`, Dracula's cyan) square box on a dark blue fill (`#1E3A47`) around each message another Claude session sends into this one, so a "please don't publish" from a peer stands out from your own prompts. Each tool call row, and each folded group line (`Read 3 files`), gets a square box too: quiet grey-blue (`#6272A4`) once done, yellow (`#F1FA8C`) while it runs, red (`#FF5555`) when it failed or you stopped it.
 - **Type:** nothing, it works by itself. Your own prompts, notifications and Claude's replies are left as they are drawn.
 - **Good to know:** a tool call's output draws below its box, not inside it: Claude Code draws the row and its result as two pieces. An unfolded group frames each of its rows, never the group as well. Calls Claude Code shows as nothing (`ToolSearch`, `TodoWrite`, the task tools) get no box, so no empty frame is left in the chat. A row that opens with a blank line has it moved above the box, so the text sits right under the top border.
-- **Works with:** other mods that draw the row, such as `prismantis`: it frames whatever they draw.
+- **Fills to the line:** a terminal colors whole cells, and a box's border line runs through the middle of its own cells, which a fill leaves dark. So every filled box with a border, its own peer box and the reply and prompt bubbles `prismantis` draws, gets a layer of the same fill around it: the color runs right through the line, with no dark strip inside it.
+- **Works with:** other mods that draw the row, such as `prismantis`: it frames whatever they draw. Filling a bubble's line needs `peer-box` to run after the mod that draws the bubble.
 
 ### 🌀 `spinner`
 

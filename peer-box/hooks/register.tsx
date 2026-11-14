@@ -73,17 +73,64 @@ const callColor = (calls: readonly Call[]) =>
 // Frames a row. One that opens with a blank line (`lift`) has it pulled up under the top
 // border, and that line of space goes above the frame instead, so the box hugs the text.
 // One that opens on its text is framed where it stands: its spacing is already outside.
-const frame = ({ Box }: Elements, row: RenderChildren, look: Look, lift: boolean, spaceAbove = lift) => (
-  <Box {...(spaceAbove ? { marginTop: 1 } : {})} paddingX={1} flexDirection="column" {...look}>
-    {lift ? (
-      <Box marginTop={-1} flexDirection="column">
-        {row}
-      </Box>
-    ) : (
-      row
-    )}
-  </Box>
-)
+//
+// A fill paints the cells inside the border only. The border's own cells keep the
+// terminal's background, and its line runs through their middle, so a strip half a cell
+// wide shows between the line and the fill. A Box of the same fill around the frame
+// paints those cells as well.
+const frame = ({ Box }: Elements, row: RenderChildren, look: Look, lift: boolean, spaceAbove = lift) => {
+  const space = spaceAbove ? { marginTop: 1 } : {}
+  const framed = (
+    <Box {...(look.backgroundColor ? {} : space)} paddingX={1} flexDirection="column" {...look}>
+      {lift ? (
+        <Box marginTop={-1} flexDirection="column">
+          {row}
+        </Box>
+      ) : (
+        row
+      )}
+    </Box>
+  )
+  if (!look.backgroundColor) return framed
+  return (
+    <Box {...space} flexDirection="column" backgroundColor={look.backgroundColor}>
+      {framed}
+    </Box>
+  )
+}
+
+// What places a Box among its siblings. The fill layer added around a frame takes these
+// over, so the frame keeps its place and size.
+const PLACING = new Set([
+  'margin', 'marginX', 'marginY', 'marginTop', 'marginBottom', 'marginLeft', 'marginRight',
+  'alignSelf', 'flexGrow', 'flexShrink', 'flexBasis', 'width', 'minWidth', 'maxWidth',
+  'position', 'top', 'right', 'bottom', 'left',
+])
+
+// Puts a layer of the same fill around every filled frame in a tree another mod drew
+// (prismantis's reply and prompt bubbles), as `frame` does for this mod's own, so no dark
+// strip shows between the line and the fill. Claude Code's own drawing is left alone, and
+// a tree with no filled frame comes back as it was.
+const fillEdges = ({ Box }: Elements, node: unknown): unknown => {
+  if (Array.isArray(node)) {
+    const out = node.map(n => fillEdges({ Box } as Elements, n))
+    return out.some((n, i) => n !== node[i]) ? out : node
+  }
+  if (typeof node !== 'object' || node === null || (node as Node).type !== 'Box') return node
+  const n = node as Node
+  const children = n.children === undefined ? undefined : fillEdges({ Box } as Elements, n.children)
+  const kept = children === n.children ? n : { ...n, children }
+  const props = n.props ?? {}
+  if (!props.borderStyle || props.backgroundColor === undefined) return kept
+  const outer: Record<string, unknown> = {}
+  const inner: Record<string, unknown> = {}
+  for (const [k, v] of Object.entries(props)) (PLACING.has(k) ? outer : inner)[k] = v
+  return (
+    <Box {...(outer as object)} flexDirection="column" backgroundColor={props.backgroundColor as string}>
+      {{ ...kept, props: inner } as never}
+    </Box>
+  )
+}
 
 export const register: Register = on => {
   // Calls drawn as rows of an unfolded group. Claude Code opens each of those rows with a
@@ -96,9 +143,13 @@ export const register: Register = on => {
     if (groupRows.size > 500) groupRows.delete(groupRows.values().next().value!)
   }
 
+  // Claude's reply, as prismantis draws it in a bubble: fill the bubble's border cells.
+  on('ui.render', { component: 'AssistantMessage' }, async ($, e, next) => fillEdges($.ui.resolve(e), await next(e)) as never)
+
   on('ui.render', { component: 'UserMessage' }, async ($, e, next) => {
-    if (!PEER_KINDS.has(e.props.origin.kind)) return next(e)
     const el = $.ui.resolve(e)
+    // Your own prompt and the rest: fill the border cells of a bubble a mod drew.
+    if (!PEER_KINDS.has(e.props.origin.kind)) return fillEdges(el, await next(e)) as never
     const name = e.props.from?.name
     const look = { borderStyle: 'single', borderColor: PEER_COLOR, backgroundColor: PEER_FILL }
     // Without a sender name Claude Code's row is framed: it opens with a blank line.

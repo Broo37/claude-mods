@@ -19,7 +19,7 @@ const boot = (on: On, tool: (text: string) => unknown = SPACED) => {
   on('ui.render', { component: 'ToolGroup' }, () => SPACED('Read 2 files') as never)
 }
 
-const mount = async ($: Engine, component: 'UserMessage' | 'ToolUse' | 'ToolGroup', requestId: string, props: Record<string, unknown>) => {
+const mount = async ($: Engine, component: 'UserMessage' | 'AssistantMessage' | 'ToolUse' | 'ToolGroup', requestId: string, props: Record<string, unknown>) => {
   const ui = await $.ui.mount({ plugin: 'peer-box', component, requestId, props, surface: 'terminal' } as never)
   const tree = (await ui.drawn()) as Drawn
   await ui.unmount()
@@ -131,35 +131,100 @@ test('frames a folded group line the same way, and leaves an unfolded group to i
 test('boxes a message from another session: sender then text, on a dark blue fill, no blank line inside', async ($, on) => {
   boot(on)
   const tree = await message($, 'TA is free', 'peer', 'ta-geisa-prep')
-  const [from, text] = kidsOf(tree)
+  const box = kidsOf(tree)[0]!
+  const [from, text] = kidsOf(box)
 
-  expect(tree.props?.borderColor).toBe('#8BE9FD')
-  expect(tree.props?.backgroundColor).toBe('#1E3A47')
+  expect(box.props?.borderColor).toBe('#8BE9FD')
+  expect(box.props?.backgroundColor).toBe('#1E3A47')
   expect(tree.props?.marginTop).toBe(1)
-  expect(kidsOf(tree)).toHaveLength(2)
+  expect(box.props?.marginTop).toBeUndefined()
+  expect(kidsOf(box)).toHaveLength(2)
   expect(from?.children).toEqual(['@ ta-geisa-prep›'])
   expect(text?.children).toEqual(['TA is free'])
 })
 
+test("paints the border's own cells with the fill too, so no dark strip shows inside the line", async ($, on) => {
+  boot(on)
+  const tree = await message($, 'TA is free', 'peer', 'ta-geisa-prep')
+
+  expect(tree.props?.backgroundColor).toBe('#1E3A47')
+  expect(tree.props?.borderStyle).toBeUndefined()
+  expect(kidsOf(tree)).toHaveLength(1)
+  expect(kidsOf(tree)[0]?.props?.borderStyle).toBe('single')
+})
+
+test('leaves a tool box, which has no fill, without the outer layer', async ($, on) => {
+  boot(on)
+
+  expect((await toolRow($)).props?.borderStyle).toBe('single')
+})
+
 test("frames Claude Code's row when a peer message names no sender, pulling its blank line up", async ($, on) => {
   boot(on)
-  const tree = await message($, 'TA release starting now', 'peer')
+  const box = kidsOf(await message($, 'TA release starting now', 'peer'))[0]!
 
-  expect(tree.props?.borderStyle).toBe('single')
-  expect(kidsOf(tree)[0]?.props?.marginTop).toBe(-1)
+  expect(box.props?.borderStyle).toBe('single')
+  expect(kidsOf(box)[0]?.props?.marginTop).toBe(-1)
 })
 
 test("pulls up Claude Code's own row for a peer message, which opens with a blank line", async $ => {
   const tree = await message($, 'TA release starting now', 'peer')
 
   expect(tree.props?.marginTop).toBe(1)
-  expect(kidsOf(tree)[0]?.props?.marginTop).toBe(-1)
+  expect(kidsOf(kidsOf(tree)[0]!)[0]?.props?.marginTop).toBe(-1)
 })
 
 test("boxes another session's SendMessage delivery too", async ($, on) => {
   boot(on)
+  const tree = await message($, 'free', 'peer-send-message', 'ta-geisa-prep')
 
-  expect((await message($, 'free', 'peer-send-message', 'ta-geisa-prep')).props?.borderStyle).toBe('single')
+  expect(kidsOf(tree)[0]?.props?.borderStyle).toBe('single')
+})
+
+// A bubble as prismantis draws one: its label, then a rounded frame on a fill.
+const BUBBLE = (text: string, place: Record<string, unknown> = {}, fill: Record<string, unknown> = { backgroundColor: '#1d2335' }) => ({
+  type: 'Box',
+  props: { flexDirection: 'column' },
+  children: [
+    { type: 'Text', props: { bold: true }, children: ['⬤ Claude'] },
+    {
+      type: 'Box',
+      props: { flexDirection: 'column', flexGrow: 1, paddingX: 1, borderStyle: 'round', borderColor: '#cc785c', ...fill, ...place },
+      children: [{ type: 'Text', props: {}, children: [text] }],
+    },
+  ],
+})
+
+test("fills the border cells of a reply bubble another mod drew, and the bubble keeps its place", async ($, on) => {
+  on('ui.render', { component: 'AssistantMessage' }, ($, e) => BUBBLE(e.props.text) as never)
+  const [label, layer] = kidsOf(await mount($, 'AssistantMessage', 'a1', { text: 'hi', isFirstOfReply: true }))
+  const bubble = kidsOf(layer!)[0]
+
+  expect(label?.children).toEqual(['⬤ Claude'])
+  expect(layer?.props?.backgroundColor).toBe('#1d2335')
+  expect(layer?.props?.flexGrow).toBe(1)
+  expect(layer?.props?.borderStyle).toBeUndefined()
+  expect(bubble?.props?.borderStyle).toBe('round')
+  expect(bubble?.props?.backgroundColor).toBe('#1d2335')
+  expect(bubble?.props?.flexGrow).toBeUndefined()
+  expect(kidsOf(bubble!)[0]?.children).toEqual(['hi'])
+})
+
+test("moves a prompt bubble's side and spacing onto its fill layer", async ($, on) => {
+  on('ui.render', { component: 'UserMessage' }, ($, e) => BUBBLE(e.props.text, { alignSelf: 'flex-end', marginTop: 1 }) as never)
+  const layer = kidsOf(await message($, 'test it here bro', 'composer'))[1]!
+
+  expect(layer.props?.alignSelf).toBe('flex-end')
+  expect(layer.props?.marginTop).toBe(1)
+  expect(kidsOf(layer)[0]?.props?.alignSelf).toBeUndefined()
+  expect(kidsOf(layer)[0]?.props?.marginTop).toBeUndefined()
+})
+
+test('leaves a reply with no filled frame as it was drawn', async ($, on) => {
+  on('ui.render', { component: 'AssistantMessage' }, ($, e) => (e.props.text === 'plain' ? SPACED('plain') : BUBBLE('framed', {}, {})) as never)
+
+  expect(untagged(await mount($, 'AssistantMessage', 'a-plain', { text: 'plain', isFirstOfReply: true }))).toEqual(untagged(SPACED('plain')))
+  expect(untagged(await mount($, 'AssistantMessage', 'a-framed', { text: 'framed', isFirstOfReply: true }))).toEqual(untagged(BUBBLE('framed', {}, {})))
 })
 
 test('leaves your own prompt and notifications as they are drawn', async ($, on) => {
